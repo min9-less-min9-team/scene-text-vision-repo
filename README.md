@@ -1,4 +1,4 @@
-# scene-text-vision
+# scene-text-vision-repo
 
 SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 09:00 ~ 9/28) 팀 레포입니다.
 이미지 속 글자를 읽어 4지선다(a/b/c/d) 정답을 고르는 VLM을 만듭니다.
