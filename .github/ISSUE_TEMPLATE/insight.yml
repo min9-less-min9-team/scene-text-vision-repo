@@ -1,0 +1,53 @@
+name: Insight
+description: 조사·학습·실험에서 배운 것을 팀에 공유합니다. 효과 없던 시도(닫은 길)도 여기에 남깁니다.
+title: "[Insight] "
+labels: ["insight"]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: 한 줄 요약
+      placeholder: 예) OCR 텍스트 첨부는 한국어 장면 VQA에서 효과가 없었다 (66→65)
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 종류
+      options:
+        - 논문·자료 조사
+        - 직전 대회 상위권 분석
+        - 우리 실험 결과
+        - 닫은 길 (효과 없음·실패)
+        - 환경·도구 팁
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: 출처
+      description: 논문 링크, 디스커션 링크, 실험 이슈 번호, 노트북 경로
+      placeholder: 예) https://arxiv.org/abs/2510.02543, #12
+  - type: textarea
+    id: content
+    attributes:
+      label: 핵심 내용
+      description: 무엇을 했고 무엇이 나왔는지. 수치는 어떤 모델·어떤 검증셋 기준인지 적기.
+    validations:
+      required: true
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: 우리 과제에의 판정
+      options:
+        - 채택
+        - 조건부 (검증 후 결정)
+        - 폐기
+        - 판단 보류
+    validations:
+      required: true
+  - type: textarea
+    id: action
+    attributes:
+      label: 다음 액션
+      placeholder: 예) PC-C에서 층·위치 유형 100문항으로 검증 (Task 이슈 #N)

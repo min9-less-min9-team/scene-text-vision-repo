@@ -1,0 +1,27 @@
+# data and artifacts never go to git (competition assets)
+data/
+runs/
+outputs/
+models/
+adapter*/
+*.npz
+*.npy
+*.csv
+*.jpg
+*.jpeg
+*.png
+*.pt
+*.safetensors
+*.bin
+*.zip
+*.log
+# python / notebooks
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+# local
+.DS_Store
+Thumbs.db
+synth/

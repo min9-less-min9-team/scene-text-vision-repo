@@ -1,0 +1,58 @@
+name: Task
+description: 내가 맡은 작업 하나. 자리, 완료 기준, 산출물 위치가 있어야 합니다.
+title: "[Task] "
+labels: ["task"]
+body:
+  - type: input
+    id: goal
+    attributes:
+      label: 목표 (한 줄)
+      placeholder: 예) Qwen3.5-27B 제로샷으로 검증 400장 정확도 측정 후 첫 제출
+    validations:
+      required: true
+  - type: dropdown
+    id: slot
+    attributes:
+      label: 실행 자리
+      options:
+        - Colab (A100)
+        - PC-A (5070 Ti)
+        - PC-B (5070 Ti)
+        - PC-C (5070 Ti)
+        - PC-D (5070 Ti)
+        - GPU 불필요
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: 입력·의존성
+      description: 필요한 데이터, 어댑터, 확률 파일, 선행 이슈 번호
+      placeholder: 예) #4 검증 분할 확정 후. Drive/scene-text-vision-runs/ft27b_v1/adapter
+  - type: textarea
+    id: done
+    attributes:
+      label: 완료 기준
+      description: 어떤 수치나 파일이 나오면 끝인지. 채택 조건이 있으면 함께.
+      placeholder: 예) valid_predictions.csv 생성, qtype별 정확도 표를 이 이슈에 댓글로. TTA1 대비 +0.5%p 이상이면 채택
+    validations:
+      required: true
+  - type: textarea
+    id: outputs
+    attributes:
+      label: 산출물 위치
+      placeholder: 예) Drive/scene-text-vision-runs/<실험명>/ (adapter, *_probs.npz, submission_*.csv)
+  - type: input
+    id: due
+    attributes:
+      label: 마감 (날짜·시각)
+      placeholder: 예) 9/21 18:00
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 체크리스트
+      options:
+        - label: 같은 검증 분할(시드·id 목록)을 사용했다
+        - label: 확률 npz를 Drive에 저장했다
+        - label: 결과 수치와 판정(채택/조건부/폐기)을 댓글로 남겼다
+        - label: 효과가 없었다면 Insight 이슈에 "닫은 길"로 기록했다
