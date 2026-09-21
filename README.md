@@ -32,7 +32,7 @@ s3.sh log / pull  ◀───────────────────�
 토큰이 맞는지는 pod를 띄우기 전에 확인할 수 있습니다(`run`도 pod 생성 전에 같은 검사를 합니다).
 
 ```bash
-git -c credential.helper= ls-remote https://토큰@github.com/min9-less-min9-team/scene-text-vision-repo.git feat/baseline
+git -c credential.helper= ls-remote https://토큰@github.com/min9-less-min9-team/scene-text-vision-repo.git feat/runpod
 ```
 
 ### 1-2. Network Volume (팀에서 1개 만들어 공유하거나 각자 생성)
@@ -76,7 +76,7 @@ RUNPOD_CLOUD=SECURE
 RUNPOD_DISK_GB=40
 RUNPOD_IMAGE=runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 STV_REPO=min9-less-min9-team/scene-text-vision-repo
-STV_BRANCH=feat/baseline
+STV_BRANCH=feat/runpod
 ```
 
 | 변수 | 설명 |
