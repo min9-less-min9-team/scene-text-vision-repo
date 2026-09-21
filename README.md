@@ -1,124 +1,261 @@
-# scene-text-vision-repo
+# Scene-Text VQA — RunPod 실험 가이드
 
-SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 09:00 ~ 9/28) 팀 레포입니다.
-이미지 속 글자를 읽어 4지선다(a/b/c/d) 정답을 고르는 VLM을 만듭니다.
+`.env`에 본인 키를 넣고 명령 한 줄을 실행하면, RunPod에서 GPU를 빌려 **학습 → dev 채점 → test 제출 파일 생성**까지 돌린 뒤 pod를 스스로 삭제합니다. 학습 과정은 wandb에 기록되고, 결과는 RunPod Network Volume(S3)에 남습니다.
 
-- 대회 페이지: https://www.kaggle.com/competitions/ssafy-16-2-ai-9-21-9-28
-- 자원: Colab Pro 1개(27B 전용), RTX 5070 Ti 16GB PC 4대(9B 이하·검증·보조 모델)
+```
+내 PC                          RunPod pod (GPU)                         저장소
+─────                          ────────────────                         ──────
+runpod_launch.py run ──────▶   repo clone → setup.sh → run.sh   ──────▶ wandb (loss, valid/acc, dev acc)
+                               (train → dev → test)             ──────▶ Network Volume /workspace/stv/outputs/…
+s3.sh log / pull  ◀──────────────────────── S3 API ◀─────────────────── (= S3 bucket)
+                               끝나면 pod 자동 삭제
+```
 
-## 처음 오면 이 순서로 읽기 (15분)
+내 PC에는 GPU가 필요 없습니다. `python3`, `bash`, [`uv`](https://docs.astral.sh/uv/)만 있으면 됩니다(Windows는 WSL).
 
-1. `docs/DAY1_PLAN.md`: 첫날 시간표, 자리별 역할, 첫날 결정 규칙, 옛 기법의 유효성 판정.
-2. `docs/PLAN.md`: 직전 대회 1·2위 코드·디스커션 분석, 규정, 모델 선택, 리스크.
-3. `docs/PAPERS.md`: 논문 조사와 "아직 안 써본" 신규 접근법 우선순위.
-4. `docs/EDA.md`: 이미지/텍스트 EDA 결론 (train=test 분포, dev는 모호 문항 집합, train↔test 중복 이미지).
-5. Issues 탭: 오늘 할 일은 전부 `task` 이슈로 올라가 있습니다. 하나를 맡으면 assignee를 자기로 바꿉니다.
+---
 
-## 한 줄 전략
+## 1. 준비물 (최초 1회)
 
-**Qwen3-VL-4B(Unsloth 4bit) + 보기 셔플 LoRA(정답 글자 토큰만 loss) + a/b/c/d 로짓 채점 + 보기 순서 TTA**가 현재 베이스라인입니다(`src/stv`, RTX 5060 Ti 16GB 검증: zero-shot 91.6% → 파인튜닝 94.4% → +TTA 95.2%, 검증 500문항).
-그 위에 더 큰 모델(8B/27B), 불확실 문항만 crop·고해상도 재추론, 계열이 다른 모델의 로그확률 앙상블을 얹습니다.
-근거는 16기 1회차 최종 1위·2위 공개 코드입니다(`docs/PLAN.md` 2절). 원본 노트북은 `notebooks/unsloth_5060ti.ipynb`입니다.
+### 1-1. 각자 발급하는 키
 
-## 이슈 규약
-
-| 종류 | 언제 | 템플릿 |
+| `.env` 변수 | 발급 위치 | 비고 |
 |---|---|---|
-| **Task** | 실제 맡은 작업 하나 (자리, 완료 기준, 산출물 위치가 있어야 함) | `[Task] ...` |
-| **Insight** | 조사·학습·실험에서 배운 것을 팀에 공유 (채택/조건부/폐기 판정 포함) | `[Insight] ...` |
+| `RUNPOD_API_KEY` | RunPod Console → Settings → **API Keys** → Create | pod 생성·삭제 권한이 필요하므로 Read/Write(또는 All) |
+| `RUNPOD_S3_ACCESS_KEY`, `RUNPOD_S3_SECRET_KEY` | RunPod Console → Settings → **S3 API Keys** → Create | access key는 `user_…`, secret은 `rps_…`. secret은 생성 직후에만 보입니다 |
+| `WANDB_API_KEY` | https://wandb.ai/authorize | 비워 두면 wandb 기록 없이 실행됩니다 |
+| `GITHUB_TOKEN` | GitHub → Settings → Developer settings → Fine-grained token | 이 repo에 **Contents: Read-only**만. pod가 private repo를 clone하는 데 씁니다 |
+| `HF_TOKEN` (선택) | https://huggingface.co/settings/tokens | gated 모델을 쓰거나 다운로드 제한에 걸릴 때만 |
 
-닫은 길(효과 없던 시도)도 Insight로 남깁니다. 같은 막다른 길을 두 번 밟지 않기 위해서입니다.
+### 1-2. Network Volume (팀에서 1개 만들어 공유하거나 각자 생성)
 
-## 팀 공유 규약 (첫날 확정)
+1. RunPod Console → Storage → **New Network Volume**
+2. **S3 API를 지원하는 데이터센터**를 고릅니다(생성 화면에 S3 지원 여부가 표시됩니다. 예: `EU-RO-1`, `EUR-IS-1`, `EU-CZ-1`, `US-KS-2`, `US-CA-2`). 쓰려는 GPU가 그 데이터센터에 있는지도 같이 확인하세요. **volume은 같은 데이터센터의 GPU에만 붙습니다.**
+3. 크기는 50GB 정도면 충분합니다(데이터 zip + 모델 캐시 약 10~20GB + 실험당 결과 수백 MB).
+4. 생성 후 표시되는 **Volume ID** → `RUNPOD_VOLUME_ID`, 데이터센터 ID → `RUNPOD_DATACENTER`
 
-- **검증 분할**: `train.csv`에서 500문항(`valid_size=500`, `split_seed=42` → `--split valid`). 모든 실험과 공개 어댑터(`ssafyjinhyeok/KFC`)가 같은 분할을 쓰므로 바꾸지 않습니다. `dev.csv`는 5명 답의 다수결(동률 제외)로 채점하지만 라벨 노이즈가 커서 참고용입니다(`docs/EDA.md`).
-- **확률 파일**: `{split}_probs.npz` (`avg` [N,4], `ids`). 행 순서는 해당 csv 순서. `stv-train`(valid)·`stv-infer`가 이 형식으로 저장하고 `stv-ensemble`이 평균합니다.
-- **제출 예산**: 하루 20회(1회차 규정 기준, 공개 후 재확인). 제출 담당자 1명. 챔피언과 다른 문항 수 D가 √D 문턱을 넘는 후보만 제출합니다.
-- **산출물 위치**: Colab `/content`는 세션 회수 시 사라지므로 adapter·npz·csv는 반드시 Drive에 둡니다(`--output-dir`).
+> volume은 pod가 없어도 용량만큼 보관료가 나갑니다. RunPod 계정이 팀원별로 따로라면 volume도 각자 만들어야 합니다(다른 계정의 volume은 붙일 수 없음).
 
-## 레포 구조
+---
 
-```
-pyproject.toml, uv.lock   uv 환경 (torch cu128 인덱스)
-configs/     sample.toml(기본 설정, 주석 참고)
-src/stv/     config.py    Config dataclass. 모든 필드가 toml 키이자 --kebab-case CLI 플래그
-             data.py      csv 로드, 프롬프트(변형 a/b/c), 검증 분할, dev 다수결, 보기 셔플 Dataset
-             model.py     Unsloth 4bit 로드, LoRA 부착, 시작 어댑터 로드, 픽셀 예산
-             train.py     정답 토큰만 loss, eval_steps마다 검증 → best 어댑터 저장, 최종 valid TTA
-             inference.py a/b/c/d 로짓 → 확률, 보기 순서 TTA, 이어하기 캐시, submission csv + probs npz
-             ensemble.py  실험별 확률 평균 → 검증 점수 + 앙상블 제출 파일
-             bench.py     추론 최대 배치 크기 측정
-scripts/     env.sh(환경 감지), setup.sh(환경 구성·데이터 연결), run.sh(train→dev→test),
-             runpod_launch.py(pod 생성·삭제), runpod_job.sh(pod 안에서 도는 실험), s3.sh(volume 업로드·다운로드)
-notebooks/   colab.ipynb, unsloth_5060ti.ipynb(베이스라인 원본 노트북, 단독 실행용)
-eda/         run_eda.py(이미지 EDA), text_eda_vqa.ipynb(텍스트 EDA), common.py(공용 헬퍼), report.md·tables·plots
-docs/        PLAN.md, DAY1_PLAN.md, PAPERS.md, EDA.md
-.github/     이슈 템플릿(task, insight), 첫날 이슈 원문
-```
-
-> `docs/`는 초기 계획 문서라 예전 스크립트(`vqa_textmc.py`, `blend_probs.py` 등)를 언급합니다. 보기 셔플·TTA·확률 결합은 새 구조에 아직 옮기지 않았습니다.
-
-## 데이터
-
-`data/` 아래에 대회 데이터를 그대로 둡니다(git에는 올리지 않습니다).
-
-```
-data/train.csv  id,path,question,a,b,c,d,answer          + data/train/*.jpg
-data/dev.csv    id,path,question,a,b,c,d,answer1..5      + data/dev/*.jpg
-data/test.csv   id,path,question,a,b,c,d                 + data/test/*.jpg
-data/sample_submission.csv  id,answer
-```
-
-## 실행
-
-설정 우선순위는 **CLI 플래그 > `--config` toml > 기본값**입니다. 전체 옵션은 `src/stv/config.py` 또는 `--help`.
+## 2. `.env` 작성
 
 ```bash
-bash scripts/setup.sh [data.zip | data_dir]      # uv 설치 → uv sync → 데이터 연결 → GPU 확인
-
-uv run stv-train --config configs/sample.toml --max-train-samples 48 --valid-size 24 --eval-steps 3 --output-dir outputs/quick   # 동작 확인
-uv run stv-train --config configs/sample.toml                          # 전체 학습 (검증 500, best 어댑터 저장, 최종 valid TTA)
-uv run stv-infer --config configs/sample.toml --split test             # submission_test.csv, test_probs.npz (끊기면 재실행 시 이어서)
-uv run stv-infer --config configs/sample.toml --split valid --adapter-dir none   # zero-shot
-uv run stv-infer --config configs/sample.toml --init-adapter ssafyjinhyeok/KFC --adapter-dir none --split valid   # 공개 어댑터 그대로
-uv run stv-ensemble outputs/qwen3_vl_4b outputs/run_seed1              # 확률 평균 → 검증 점수 + outputs/ensemble/submission_test.csv
-
-bash scripts/run.sh configs/sample.toml --output-dir outputs/full      # train→dev→test 한 번에
+cp .env.example .env      # .env는 .gitignore에 있어 git에 올라가지 않습니다
 ```
 
-산출물은 `--output-dir`(기본 `outputs/qwen3_vl_4b`)에 adapter, `log.txt`(loss·검증 정확도), `submission_{split}.csv`, `{split}_probs.npz`로 저장됩니다.
-학습 설정을 바꿀 때는 `--output-dir`를 다르게 주세요(어댑터가 덮어써짐). OOM이면 `batch_size 1 / grad_accum 8` → `finetune_vision false` → `train_max_pixels` 축소 → `lora_r 8` 순으로 줄입니다.
+```ini
+# --- 개인 ---
+STV_USER=yeseo                    # 영문 이름. 결과 폴더·wandb run 이름·pod 이름에 쓰임
+RUNPOD_API_KEY=rpa_xxxxxxxx
+WANDB_API_KEY=xxxxxxxx
+HF_TOKEN=
+GITHUB_TOKEN=github_pat_xxxxxxxx
 
-## 환경별 사용법
+RUNPOD_S3_ACCESS_KEY=user_xxxxxxxx
+RUNPOD_S3_SECRET_KEY=rps_xxxxxxxx
 
-`scripts/env.sh`가 환경을 감지해 캐시 위치와 python 실행 방식을 정합니다.
+# --- 팀 공용 ---
+RUNPOD_VOLUME_ID=abc123xyz        # = S3 bucket 이름
+RUNPOD_DATACENTER=EU-RO-1
+WANDB_ENTITY=our-team             # wandb 팀 이름. 비우면 개인 계정에 기록
+WANDB_PROJECT=stv
 
-| 환경 | 방법 |
+# --- pod 사양 ---
+RUNPOD_GPU="NVIDIA GeForce RTX 4090"
+RUNPOD_GPU_COUNT=1
+RUNPOD_CLOUD=SECURE
+RUNPOD_DISK_GB=40
+RUNPOD_IMAGE=runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+STV_REPO=min9-less-min9-team/scene-text-vision-repo
+STV_BRANCH=feat/baseline
+```
+
+| 변수 | 설명 |
 |---|---|
-| **로컬 PC (RTX 50xx)** | `bash scripts/setup.sh` 후 위 `uv run ...` 명령. torch는 cu128 휠로 고정돼 있습니다. |
-| **RunPod** | `bash scripts/setup.sh /workspace/data.zip` → `nohup bash scripts/run.sh configs/sample.toml > run.log 2>&1 &`. HF·uv 캐시는 `/workspace`(영구 볼륨)에 둡니다. |
-| **Colab** | `notebooks/colab.ipynb`를 위에서부터 실행. 데이터는 `MyDrive/stv/data.zip`, 결과는 Drive에 저장. private repo라 clone 시 토큰이 필요합니다. |
+| `STV_USER` | 결과가 `stv/outputs/{STV_USER}/{실험 이름}/`에 저장되므로 팀원끼리 겹치지 않게 |
+| `RUNPOD_GPU` | RunPod GPU type ID. 쉼표로 여러 개를 쓰면 앞에서부터 재고가 있는 것을 잡습니다. 값에 공백이 있으므로 **따옴표 필수**. 예: `"NVIDIA GeForce RTX 4090,NVIDIA RTX A6000"`, `"NVIDIA A100 80GB PCIe,NVIDIA A100-SXM4-80GB"`, `"NVIDIA L40S"` |
+| `RUNPOD_CLOUD` | Network Volume은 Secure Cloud에서만 붙으므로 `SECURE` 유지 |
+| `RUNPOD_DISK_GB` | 컨테이너 디스크. venv(약 15GB)와 압축을 푼 데이터가 들어갑니다 |
+| `RUNPOD_IMAGE` | pod 이미지. torch 등은 `uv sync`가 `uv.lock`대로 다시 설치하므로 CUDA 12.8 계열 드라이버가 되는 이미지면 됩니다 |
+| `STV_BRANCH` | pod가 clone할 브랜치. 본인 실험 브랜치로 바꿔도 됩니다 |
 
-### RunPod 원격 실험 (GPU 대여 → wandb 기록 → Network Volume/S3 저장)
-
-팀원은 `.env`만 본인 키로 채우면 같은 명령으로 돌릴 수 있습니다. 로컬에는 `python3`와 `uv`만 있으면 됩니다(GPU 불필요).
+이미 셸에 export된 환경변수는 `.env`보다 우선합니다. 한 번만 다른 GPU로 돌리고 싶다면:
 
 ```bash
-cp .env.example .env                           # 본인 키 입력 (git에 올라가지 않음)
-bash scripts/s3.sh push-data data.zip          # 최초 1회: 데이터를 volume의 stv/data.zip으로 업로드
-
-python scripts/runpod_launch.py run configs/sample.toml                          # pod 생성 → 학습·dev 채점·test 추론 → pod 자동 삭제
-python scripts/runpod_launch.py run configs/sample.toml --name r32 -- --lora-r 32 --lora-alpha 32
-python scripts/runpod_launch.py list           # 내 pod / stop POD_ID로 수동 삭제
-
-bash scripts/s3.sh log r32                     # 진행 로그(run.log)
-bash scripts/s3.sh pull r32                    # 결과를 outputs/{STV_USER}/r32/ 로 내려받기
+RUNPOD_GPU="NVIDIA A100 80GB PCIe" python scripts/runpod_launch.py run configs/big.toml
 ```
 
-- **동작**: pod가 뜨면 `STV_BRANCH`를 clone해 `scripts/runpod_job.sh`를 실행합니다. 따라서 **설정 파일·코드 변경은 push한 뒤** 실행해야 반영됩니다.
-- **저장**: 결과는 volume의 `stv/outputs/{STV_USER}/{실험 이름}/`에 바로 기록됩니다(Network Volume = S3 bucket). HF 모델 캐시도 volume에 남아 다음 실험부터는 다시 받지 않습니다.
-- **wandb**: `WANDB_API_KEY`가 있으면 train loss·lr, `valid/acc`(eval_steps마다), 최종 valid/dev 정확도가 run `{STV_USER}/{실험 이름}`에 기록됩니다. 키가 없으면 기록 없이 돕니다(로컬·Colab도 동일).
-- **과금**: 실험이 끝나면 성공·실패와 관계없이 pod를 삭제합니다. `--keep`을 쓴 경우에는 직접 `stop` 해야 합니다. volume 보관료는 별도입니다.
-- Network Volume은 Secure Cloud의 해당 데이터센터 GPU에만 붙습니다. 재고가 없으면 `RUNPOD_GPU`에 대체 GPU를 쉼표로 나열하세요.
+---
 
-Windows는 `PYTHONUTF8=1` 환경변수를 설정하고, 스크립트는 WSL 터미널에서 실행합니다.
+## 3. 데이터 업로드 (volume당 1회)
+
+대회 데이터(`train.csv`, `dev.csv`, `test.csv`와 이미지 폴더)를 zip 하나로 묶어 volume에 올립니다.
+
+```bash
+bash scripts/s3.sh push-data /path/to/data.zip     # → volume의 stv/data.zip
+bash scripts/s3.sh ls stv/                         # 올라갔는지 확인
+```
+
+zip 안에 최상위 폴더가 한 겹 더 있어도 됩니다(`setup.sh`가 `train.csv` 위치를 찾아 끌어올림). `aws` CLI가 없으면 `uvx`가 자동으로 받아 실행합니다.
+
+---
+
+## 4. 실험 실행
+
+```bash
+# 요청 내용만 미리 보기 (pod를 만들지 않음, 키는 ***로 가려짐)
+python scripts/runpod_launch.py run configs/sample.toml --dry-run
+
+# 실행. 실험 이름 = 설정 파일명(sample)
+python scripts/runpod_launch.py run configs/sample.toml
+
+# 실험 이름을 지정하고, "--" 뒤에 설정 덮어쓰기 플래그 전달
+python scripts/runpod_launch.py run configs/sample.toml --name r32 -- --lora-r 32 --lora-alpha 32
+```
+
+실행하면 pod ID, 시간당 요금, 콘솔 링크, 결과 경로가 출력됩니다. **터미널을 닫아도 실험은 계속 돕니다.**
+
+### 처음에는 smoke test부터
+
+```bash
+python scripts/runpod_launch.py run configs/sample.toml --name smoke --keep -- --max-train-samples 200 --max-infer-samples 50 --eval-steps 10
+bash scripts/s3.sh log smoke                        # 끝까지 도는지 확인
+python scripts/runpod_launch.py stop POD_ID         # --keep을 썼으므로 직접 삭제
+```
+
+### 주의: pod는 GitHub의 코드를 받습니다
+
+pod는 내 PC의 파일이 아니라 **`STV_BRANCH`를 새로 clone**해서 실행합니다. 설정 파일이나 코드를 바꿨다면 **commit & push한 뒤** 실행하세요. 값 몇 개만 바꿔 보는 실험은 push 없이 `--` 뒤 플래그로 하면 됩니다.
+
+### 설정 덮어쓰기 플래그
+
+`src/stv/config.py`의 `Config` 필드가 모두 `--kebab-case` 플래그가 됩니다(우선순위: 플래그 > toml > 기본값). `--` 뒤의 플래그는 train·dev 추론·test 추론 세 단계에 똑같이 전달됩니다. `--output-dir`은 job이 volume 경로로 지정하므로 넣지 마세요.
+
+| 플래그 | 기본 | 설명 |
+|---|---|---|
+| `--model-id` | `unsloth/Qwen3-VL-4B-Instruct-unsloth-bnb-4bit` | 8B 이상은 `--batch-size 1 --grad-accum 8` 권장 |
+| `--lora-r`, `--lora-alpha` | 16, 16 | |
+| `--epochs`, `--lr` | 1.0, 0(자동 1e-4) | `--init-adapter`가 있으면 lr 자동 5e-5 |
+| `--batch-size`, `--grad-accum` | 2, 4 | 유효 배치 = 곱 |
+| `--train-max-pixels`, `--infer-max-pixels` | 1048576 | 이미지 픽셀 예산 |
+| `--prompt-variant` | `a` | `a` 기본 / `b` 글자 읽기 강조 / `c` 한국어 시스템 프롬프트 |
+| `--use-dev`, `--dev-min-votes` | false, 3 | dev 다수결 라벨을 학습에 추가 |
+| `--no-shuffle-options`, `--no-finetune-vision` | | bool 필드는 `--no-` 접두사로 끕니다 |
+| `--eval-steps` | 150 | 이 step마다 검증 → 최고점 어댑터 저장 |
+| `--n-tta`, `--infer-batch-size` | 2, 4 | 추론 TTA 횟수·배치 |
+| `--max-train-samples`, `--max-infer-samples` | 0(전체) | 빠른 실험용 |
+| `--seed` | 42 | `--valid-size`, `--split-seed`는 실험 간 비교를 위해 바꾸지 마세요 |
+
+### pod 관리
+
+```bash
+python scripts/runpod_launch.py list             # 내 계정의 pod (ID, 상태, 시간당 요금, 이름)
+python scripts/runpod_launch.py stop POD_ID      # pod 삭제
+```
+
+| `run` 옵션 | 설명 |
+|---|---|
+| `--name NAME` | 실험 이름. 같은 이름으로 다시 돌리면 같은 폴더·같은 wandb run에 이어 씁니다 → 새 실험은 새 이름으로 |
+| `--keep` | 끝나도 pod를 삭제하지 않음(SSH로 들어가 디버깅할 때). **직접 `stop` 하지 않으면 계속 과금됩니다** |
+| `--dry-run` | API 요청 내용만 출력 |
+
+---
+
+## 5. pod 안에서 일어나는 일
+
+`scripts/runpod_job.sh`가 순서대로 실행합니다.
+
+1. `git clone -b $STV_BRANCH` → `/root/stv`
+2. `scripts/setup.sh /workspace/stv/data.zip`: `uv sync --frozen`(첫 실행 5~10분, 이후에는 volume의 uv 캐시로 단축) → 데이터를 컨테이너 로컬 디스크에 압축 해제
+3. `scripts/run.sh CONFIG … --output-dir /workspace/stv/outputs/{STV_USER}/{실험 이름}`
+   - `stv.train`: 학습. `eval_steps`마다 검증 500문항을 채점해 최고점 어댑터만 저장
+   - `stv.inference --split dev`: dev 채점
+   - `stv.inference --split test`: `submission_test.csv` 생성
+4. 종료 코드를 `exit_code`에 쓰고 **성공·실패와 관계없이 pod 삭제**(`--keep` 제외)
+
+HF 모델 캐시(`/workspace/.cache/huggingface`)와 uv 캐시는 volume에 남으므로 두 번째 실험부터는 모델을 다시 받지 않습니다.
+
+---
+
+## 6. 모니터링
+
+**wandb** — `https://wandb.ai/{WANDB_ENTITY}/{WANDB_PROJECT}`, run 이름 `{STV_USER}/{실험 이름}`, 태그 `{STV_USER}`·`runpod`
+
+| 항목 | 내용 |
+|---|---|
+| `train/loss`, `train/learning_rate`, `train/grad_norm` | 10 step마다 |
+| `valid/acc`, `valid/best_acc` | step 0(시작 모델)과 `eval_steps`마다 |
+| summary `valid/start_acc`, `valid/best_step`, `valid/best_acc`, `valid/final_acc_tta{N}` | 학습 종료 시 |
+| summary `dev/acc_tta{N}`, `dev/n` | dev 채점 후(같은 run에 이어 기록) |
+| config | `Config` 전체 값 |
+
+**로그** — pod가 살아 있든 삭제됐든 volume에서 읽습니다.
+
+```bash
+bash scripts/s3.sh log r32                 # run.log 마지막 40줄
+LINES_N=200 bash scripts/s3.sh log r32     # 200줄
+bash scripts/s3.sh log r32 minsu           # 다른 팀원(STV_USER=minsu)의 실험
+```
+
+---
+
+## 7. 결과 받기
+
+```bash
+bash scripts/s3.sh ls                      # 내 실험 목록 (stv/outputs/{STV_USER}/)
+bash scripts/s3.sh ls stv/outputs/         # 팀 전체
+bash scripts/s3.sh pull r32                # → outputs/{STV_USER}/r32/
+bash scripts/s3.sh pull r32 minsu          # 팀원 결과 → outputs/minsu/r32/
+```
+
+| 파일 | 내용 |
+|---|---|
+| `submission_test.csv` | **제출 파일** |
+| `test_probs.npz`, `dev_probs.npz`, `valid_probs.npz` | 문항별 a/b/c/d 확률(`avg` [N,4], `ids`) → 앙상블용 |
+| `submission_dev.csv`, `submission_valid.csv` | dev·valid 예측 |
+| `adapter_model.safetensors`, `adapter_config.json`, 토크나이저·프로세서 파일 | 최고 검증 점수의 LoRA 어댑터 |
+| `run.log` | pod 전체 출력(환경 구성 포함) |
+| `log.txt` | step별 loss·valid_acc 요약 |
+| `config.toml` | 실행에 쓴 설정 파일 사본(`--` 플래그로 덮어쓴 값은 `run.log` 첫 줄과 wandb config에서 확인) |
+| `exit_code` | `0`이면 정상 종료 |
+| `wandb_run_id.txt` | train·추론을 한 wandb run으로 잇는 ID |
+
+그 외 S3 작업은 `aws` 명령을 그대로 쓸 수 있습니다(엔드포인트·키는 자동 설정).
+
+```bash
+bash scripts/s3.sh aws s3 rm s3://$RUNPOD_VOLUME_ID/stv/outputs/yeseo/smoke/ --recursive   # 실험 삭제
+bash scripts/s3.sh aws s3 cp s3://$RUNPOD_VOLUME_ID/stv/outputs/yeseo/r32/submission_test.csv .
+```
+
+---
+
+## 8. 문제 해결
+
+| 증상 | 원인·조치 |
+|---|---|
+| `RunPod API POST /pods → 4xx/5xx`, "no instances available" 류 | 그 데이터센터에 해당 GPU 재고 없음 → `RUNPOD_GPU`에 대체 GPU를 쉼표로 추가하거나 잠시 뒤 재시도 |
+| `→ 401` | `RUNPOD_API_KEY`가 틀렸거나 권한이 Read-only |
+| pod가 뜨고 1~2분 뒤 사라지고 `run.log`도 없음 | clone 실패: `GITHUB_TOKEN` 권한·만료, `STV_REPO`/`STV_BRANCH` 오타. `--keep`으로 다시 띄워 콘솔의 Logs 확인 |
+| `run.log`에 `data.zip 없음` | 3번(데이터 업로드)을 안 했거나 다른 volume에 올림 |
+| `exit_code`가 0이 아님 | `LINES_N=200 bash scripts/s3.sh log 이름`으로 오류 확인. OOM이면 `-- --batch-size 1 --grad-accum 8` 또는 `--no-finetune-vision` |
+| `s3.sh`가 403/SignatureDoesNotMatch | S3 키가 API 키와 다른 것인지 확인(`user_…`/`rps_…`), `RUNPOD_DATACENTER`가 volume 위치와 같은지 확인 |
+| `s3.sh ls`에 방금 쓴 파일이 안 보임 | pod가 쓰는 중인 파일은 반영이 늦을 수 있음. 잠시 뒤 다시 |
+| wandb에 run이 없음 | `WANDB_API_KEY` 미설정, 또는 `WANDB_ENTITY` 팀에 본인이 속해 있지 않음 |
+| `--keep` pod가 실험 후에도 과금 | 정상 동작. `list`로 확인하고 `stop` |
+
+**보안**: `.env`는 절대 커밋하지 마세요. `GITHUB_TOKEN`은 pod 시작 명령에, 나머지 키는 pod 환경변수에 들어가 본인 RunPod 콘솔에서 보입니다. GitHub 토큰은 이 repo 읽기 전용으로만 발급하세요.
+
+---
+
+## 관련 파일
+
+| 파일 | 역할 |
+|---|---|
+| `.env.example` | `.env` 템플릿 |
+| `scripts/runpod_launch.py` | 내 PC에서 실행: pod 생성(`run`)·목록(`list`)·삭제(`stop`) |
+| `scripts/runpod_job.sh` | pod 안에서 실행: 환경 구성 → 실험 → pod 삭제 |
+| `scripts/s3.sh` | 내 PC에서 실행: volume 업로드·목록·로그·다운로드 |
+| `scripts/setup.sh`, `scripts/run.sh`, `scripts/env.sh` | 환경 구성, train→dev→test, 환경 감지·캐시 경로 |
+| `configs/sample.toml` | 실험 설정 예시(필드 설명 포함) |
+| `src/stv/tracking.py` | wandb 기록(`WANDB_API_KEY`가 없으면 아무 일도 하지 않음) |
