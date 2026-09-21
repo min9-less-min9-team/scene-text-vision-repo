@@ -4,6 +4,8 @@
     python scripts/runpod_launch.py run configs/sample.toml                       # 실험 이름 = 설정 파일명
     python scripts/runpod_launch.py run configs/sample.toml --name r32 -- --lora-r 32 --lora-alpha 32
     python scripts/runpod_launch.py run configs/sample.toml --keep                # 끝나도 pod 유지 (디버깅, 직접 종료 필요)
+    python scripts/runpod_launch.py run configs/sample.toml --name smoke --infer-only -- --split dev --max-infer-samples 5 --n-tta 1
+                                                                                  # 학습 없이 zero-shot 추론만 (파이프라인 점검용)
     python scripts/runpod_launch.py list                                          # 내 pod 목록
     python scripts/runpod_launch.py stop POD_ID                                   # pod 삭제
 
@@ -15,6 +17,7 @@ import argparse
 import json
 import os
 import shlex
+import subprocess
 import sys
 import time
 import urllib.error
@@ -53,7 +56,9 @@ def need(*keys):
 def api(method: str, path: str, body=None):
     req = urllib.request.Request(
         API + path, method=method, data=json.dumps(body).encode() if body is not None else None,
-        headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}", "Content-Type": "application/json"},
+        # User-Agent: 기본값(Python-urllib)은 Cloudflare가 403(1010)으로 막음
+        headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}", "Content-Type": "application/json",
+                 "User-Agent": "stv-runpod-launch/1.0"},
     )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -61,6 +66,15 @@ def api(method: str, path: str, body=None):
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as err:
         sys.exit(f"RunPod API {method} {path} → {err.code}\n{err.read().decode(errors='replace')}")
+
+
+def check_repo_access(clone_url: str, branch: str, token: str):
+    """pod를 만들기(=과금) 전에 토큰으로 브랜치를 읽을 수 있는지 확인."""
+    proc = subprocess.run(["git", "-c", "credential.helper=", "ls-remote", "--heads", clone_url, branch],
+                          capture_output=True, text=True, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+    if proc.returncode or not proc.stdout.strip():
+        msg = (proc.stderr.strip() or f"브랜치 {branch} 없음").replace(token or "\0", "***")
+        sys.exit(f"GitHub repo를 읽을 수 없습니다 (GITHUB_TOKEN 권한 / STV_REPO / STV_BRANCH 확인)\n{msg}")
 
 
 def run(args):
@@ -74,15 +88,20 @@ def run(args):
     token = os.environ.get("GITHUB_TOKEN", "")
     clone_url = f"https://{token + '@' if token else ''}github.com/{repo}.git"
 
+    if not args.dry_run:
+        check_repo_access(clone_url, branch, token)
+    out_dir = f"/workspace/stv/outputs/{user}/{name}"
+
     # pod 시작 명령: repo를 받아 scripts/runpod_job.sh에 넘김. 실패해도 job 스크립트가 pod를 종료
     start = (
-        f"rm -rf /root/stv && git clone --depth 1 -b {shlex.quote(branch)} {shlex.quote(clone_url)} /root/stv"
+        f"rm -rf /root/stv && git clone --depth 1 -b {shlex.quote(branch)} {shlex.quote(clone_url)} /root/stv 2>/tmp/clone.log"
         f" && exec bash /root/stv/scripts/runpod_job.sh {shlex.quote(args.config)} {' '.join(map(shlex.quote, args.extra))}"
-        # clone 자체가 실패하면 job 스크립트가 없으므로 여기서 종료
-        " || { sleep 60; runpodctl remove pod $RUNPOD_POD_ID; }"
+        # clone 자체가 실패하면 job 스크립트가 없으므로 이유를 volume에 남기고 여기서 종료
+        f" || {{ mkdir -p {shlex.quote(out_dir)}; cp /tmp/clone.log {shlex.quote(out_dir)}/run.log; sleep 30; runpodctl remove pod $RUNPOD_POD_ID; sleep infinity; }}"
     )
     env = {k: os.environ[k] for k in FORWARD if os.environ.get(k)}
-    env |= {"STV_RUN_NAME": name, "WANDB_RUN_NAME": f"{user}/{name}", "STV_KEEP_POD": "1" if args.keep else "0"}
+    env |= {"STV_RUN_NAME": name, "WANDB_RUN_NAME": f"{user}/{name}", "STV_KEEP_POD": "1" if args.keep else "0",
+            "STV_MODE": "infer" if args.infer_only else "full"}
     body = {
         "name": f"stv-{user}-{name}"[:60],
         "imageName": os.environ.get("RUNPOD_IMAGE", "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"),
@@ -130,6 +149,7 @@ def main():
     p.add_argument("config")
     p.add_argument("--name", default="", help="실험 이름 (결과 폴더·wandb run 이름). 기본: 설정 파일명")
     p.add_argument("--keep", action="store_true", help="끝나도 pod를 삭제하지 않음")
+    p.add_argument("--infer-only", action="store_true", help="학습 없이 zero-shot 추론만 (split은 -- --split dev 처럼 지정, 기본 test)")
     p.add_argument("--dry-run", action="store_true", help="요청 내용만 출력")
     p.set_defaults(func=run)
     sub.add_parser("list").set_defaults(func=list_pods)

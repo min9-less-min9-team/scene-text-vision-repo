@@ -36,6 +36,12 @@ trap finish EXIT
     [ -e "$VOLUME/data.zip" ] || { echo "[job] $VOLUME/data.zip 없음 → bash scripts/s3.sh push-data data.zip"; exit 2; }
     bash scripts/setup.sh "$VOLUME/data.zip"
     cp "$CONFIG" "$OUT/config.toml"
-    bash scripts/run.sh "$CONFIG" "$@" --output-dir "$OUT"
+    if [ "${STV_MODE:-full}" = "infer" ]; then
+        # 학습 없이 zero-shot 추론만 (파이프라인 점검용). split은 extra flags의 --split, 기본 test
+        source scripts/env.sh
+        $STV_PY -m stv.inference --config "$CONFIG" "$@" --adapter-dir none --output-dir "$OUT"
+    else
+        bash scripts/run.sh "$CONFIG" "$@" --output-dir "$OUT"
+    fi
 } 2>&1 | tee -a "$OUT/run.log"
 exit "${PIPESTATUS[0]}"
