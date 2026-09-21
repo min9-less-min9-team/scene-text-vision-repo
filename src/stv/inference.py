@@ -54,6 +54,8 @@ def predict_probs(model, processor, df: pd.DataFrame, data_dir: str, batch_size:
 def infer(cfg: Config):
     df = subsample(load_split(cfg, cfg.split), cfg.max_infer_samples, cfg.seed)
 
+    # WSL/Windows 드라이버는 VRAM이 차면 OOM 대신 시스템 메모리로 넘겨 수십 배 느려짐 → 상한을 걸어 바로 OOM이 나게 함
+    torch.cuda.set_per_process_memory_fraction(0.95)
     adapter = cfg.adapter_dir or cfg.output_dir
     model, processor = load_model(cfg.model_id if adapter == "none" else adapter, cfg.load_in_4bit)
     FastVisionModel.for_inference(model)
