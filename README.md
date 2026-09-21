@@ -11,7 +11,8 @@ SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 0
 1. `docs/DAY1_PLAN.md`: 첫날 시간표, 자리별 역할, 첫날 결정 규칙, 옛 기법의 유효성 판정.
 2. `docs/PLAN.md`: 직전 대회 1·2위 코드·디스커션 분석, 규정, 모델 선택, 리스크.
 3. `docs/PAPERS.md`: 논문 조사와 "아직 안 써본" 신규 접근법 우선순위.
-4. Issues 탭: 오늘 할 일은 전부 `task` 이슈로 올라가 있습니다. 하나를 맡으면 assignee를 자기로 바꿉니다.
+4. `docs/EDA.md`: 이미지/텍스트 EDA 결론 (train=test 분포, dev는 모호 문항 집합, train↔test 중복 이미지).
+5. Issues 탭: 오늘 할 일은 전부 `task` 이슈로 올라가 있습니다. 하나를 맡으면 assignee를 자기로 바꿉니다.
 
 ## 한 줄 전략
 
@@ -47,7 +48,8 @@ src/stv/     config.py    Config dataclass. 모든 필드가 toml 키이자 --ke
              inference.py a/b/c/d 다음 토큰 로짓 → 확률, submission csv + probs npz 저장
 scripts/     env.sh(환경 감지), setup.sh(환경 구성·데이터 연결), run.sh(train→dev→test), lab_sync.sh(Docker lab으로 코드 복사)
 notebooks/   colab.ipynb, lab.ipynb
-docs/        PLAN.md, DAY1_PLAN.md, PAPERS.md
+eda/         run_eda.py(이미지 EDA), text_eda_vqa.ipynb(텍스트 EDA), common.py(공용 헬퍼), report.md·tables·plots
+docs/        PLAN.md, DAY1_PLAN.md, PAPERS.md, EDA.md
 .github/     이슈 템플릿(task, insight), 첫날 이슈 원문
 ```
 
