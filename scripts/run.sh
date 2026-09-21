@@ -11,6 +11,6 @@ source scripts/env.sh
 CONFIG=${1:?usage: run.sh CONFIG [extra flags...]}
 shift
 
-uv run stv-train --config "$CONFIG" "$@"
-uv run stv-infer --config "$CONFIG" "$@" --split dev
-uv run stv-infer --config "$CONFIG" "$@" --split test
+$STV_PY -m stv.train --config "$CONFIG" "$@"
+$STV_PY -m stv.inference --config "$CONFIG" "$@" --split dev
+$STV_PY -m stv.inference --config "$CONFIG" "$@" --split test
