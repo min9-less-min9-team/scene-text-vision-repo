@@ -9,6 +9,7 @@ from peft import get_peft_model_state_dict, set_peft_model_state_dict
 from transformers import TrainerCallback
 from trl import SFTConfig, SFTTrainer
 
+from . import tracking
 from .config import Config, parse_config
 from .data import CHOICES, VQATrainDataset, load_split, load_train
 from .inference import evaluate, predict_probs, save_outputs
@@ -39,6 +40,7 @@ class BestValidCallback(TrainerCallback):
         acc = evaluate(self.valid_df, probs, name=f"step {state.global_step}", show_wrong=0)
         self.history.append((state.global_step, acc))
         write_log(self.cfg, f"step {state.global_step}/{state.max_steps} valid_acc {acc:.4f}")
+        tracking.log({"valid/acc": acc, "valid/best_acc": max(acc, self.best_acc)}, step=state.global_step)
         if acc > self.best_acc:
             self._save_best(model, acc, state.global_step)
             print(f"   ★ best 갱신 → {self.cfg.output_dir}", flush=True)
@@ -64,6 +66,7 @@ def check_label_masking(collator, dataset, tokenizer):
 def train(cfg: Config):
     os.makedirs(cfg.output_dir, exist_ok=True)
     init_dir = apply_init_adapter_config(cfg)
+    tracking.init(cfg, "train")
     train_df, valid_df = load_train(cfg), load_split(cfg, "valid")
     print(f"train {len(train_df)} | valid {len(valid_df)} | 정답 분포 {train_df['answer'].value_counts().sort_index().to_dict()}")
 
@@ -92,6 +95,7 @@ def train(cfg: Config):
         FastVisionModel.for_inference(model)
         start_acc = evaluate(valid_df, predict_probs(model, processor, valid_df, cfg, desc="step 0 valid"), name="시작 모델 valid")
         write_log(cfg, f"step 0 ({'init_adapter' if init_dir else 'zero-shot'}) valid_acc {start_acc:.4f}")
+        tracking.log({"valid/acc": start_acc, "valid/best_acc": start_acc}, step=0)
     set_image_budget(processor, cfg.train_max_pixels, cfg.min_pixels)
     FastVisionModel.for_training(model)
     best_cb = BestValidCallback(model, processor, cfg, valid_df, start_acc) if len(valid_df) else None
@@ -116,7 +120,7 @@ def train(cfg: Config):
             bf16=True,
             logging_steps=10,
             save_strategy="no",  # 저장은 BestValidCallback이 담당
-            report_to="none",
+            report_to="wandb" if tracking.enabled() else "none",
             seed=cfg.seed,
             # 비전 데이터용 필수 설정 (Unsloth 권장)
             remove_unused_columns=False,
@@ -153,6 +157,9 @@ def train(cfg: Config):
         print(f"시작 {start_acc:.4f} → best step {best_cb.best_step} {best_cb.best_acc:.4f} → +TTA{cfg.n_tta} {final_acc:.4f}"
               f" (검증 {len(valid_df)}문항 표준오차 약 ±{(final_acc * (1 - final_acc) / len(valid_df)) ** 0.5 * 100:.1f}%p)")
         save_outputs(valid_df, probs, cfg, "valid")
+        tracking.summary({"valid/start_acc": start_acc, "valid/best_step": best_cb.best_step,
+                          "valid/best_acc": best_cb.best_acc, f"valid/final_acc_tta{cfg.n_tta}": final_acc})
+    tracking.finish()
 
 
 def main():

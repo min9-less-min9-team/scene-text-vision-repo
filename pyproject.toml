@@ -13,6 +13,7 @@ dependencies = [
     "numpy",
     "torch",
     "torchvision",
+    "wandb",
 ]
 
 [project.scripts]

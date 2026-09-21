@@ -48,7 +48,8 @@ src/stv/     config.py    Config dataclass. 모든 필드가 toml 키이자 --ke
              inference.py a/b/c/d 로짓 → 확률, 보기 순서 TTA, 이어하기 캐시, submission csv + probs npz
              ensemble.py  실험별 확률 평균 → 검증 점수 + 앙상블 제출 파일
              bench.py     추론 최대 배치 크기 측정
-scripts/     env.sh(환경 감지), setup.sh(환경 구성·데이터 연결), run.sh(train→dev→test)
+scripts/     env.sh(환경 감지), setup.sh(환경 구성·데이터 연결), run.sh(train→dev→test),
+             runpod_launch.py(pod 생성·삭제), runpod_job.sh(pod 안에서 도는 실험), s3.sh(volume 업로드·다운로드)
 notebooks/   colab.ipynb, unsloth_5060ti.ipynb(베이스라인 원본 노트북, 단독 실행용)
 eda/         run_eda.py(이미지 EDA), text_eda_vqa.ipynb(텍스트 EDA), common.py(공용 헬퍼), report.md·tables·plots
 docs/        PLAN.md, DAY1_PLAN.md, PAPERS.md, EDA.md
@@ -97,5 +98,27 @@ bash scripts/run.sh configs/sample.toml --output-dir outputs/full      # train�
 | **로컬 PC (RTX 50xx)** | `bash scripts/setup.sh` 후 위 `uv run ...` 명령. torch는 cu128 휠로 고정돼 있습니다. |
 | **RunPod** | `bash scripts/setup.sh /workspace/data.zip` → `nohup bash scripts/run.sh configs/sample.toml > run.log 2>&1 &`. HF·uv 캐시는 `/workspace`(영구 볼륨)에 둡니다. |
 | **Colab** | `notebooks/colab.ipynb`를 위에서부터 실행. 데이터는 `MyDrive/stv/data.zip`, 결과는 Drive에 저장. private repo라 clone 시 토큰이 필요합니다. |
+
+### RunPod 원격 실험 (GPU 대여 → wandb 기록 → Network Volume/S3 저장)
+
+팀원은 `.env`만 본인 키로 채우면 같은 명령으로 돌릴 수 있습니다. 로컬에는 `python3`와 `uv`만 있으면 됩니다(GPU 불필요).
+
+```bash
+cp .env.example .env                           # 본인 키 입력 (git에 올라가지 않음)
+bash scripts/s3.sh push-data data.zip          # 최초 1회: 데이터를 volume의 stv/data.zip으로 업로드
+
+python scripts/runpod_launch.py run configs/sample.toml                          # pod 생성 → 학습·dev 채점·test 추론 → pod 자동 삭제
+python scripts/runpod_launch.py run configs/sample.toml --name r32 -- --lora-r 32 --lora-alpha 32
+python scripts/runpod_launch.py list           # 내 pod / stop POD_ID로 수동 삭제
+
+bash scripts/s3.sh log r32                     # 진행 로그(run.log)
+bash scripts/s3.sh pull r32                    # 결과를 outputs/{STV_USER}/r32/ 로 내려받기
+```
+
+- **동작**: pod가 뜨면 `STV_BRANCH`를 clone해 `scripts/runpod_job.sh`를 실행합니다. 따라서 **설정 파일·코드 변경은 push한 뒤** 실행해야 반영됩니다.
+- **저장**: 결과는 volume의 `stv/outputs/{STV_USER}/{실험 이름}/`에 바로 기록됩니다(Network Volume = S3 bucket). HF 모델 캐시도 volume에 남아 다음 실험부터는 다시 받지 않습니다.
+- **wandb**: `WANDB_API_KEY`가 있으면 train loss·lr, `valid/acc`(eval_steps마다), 최종 valid/dev 정확도가 run `{STV_USER}/{실험 이름}`에 기록됩니다. 키가 없으면 기록 없이 돕니다(로컬·Colab도 동일).
+- **과금**: 실험이 끝나면 성공·실패와 관계없이 pod를 삭제합니다. `--keep`을 쓴 경우에는 직접 `stop` 해야 합니다. volume 보관료는 별도입니다.
+- Network Volume은 Secure Cloud의 해당 데이터센터 GPU에만 붙습니다. 재고가 없으면 `RUNPOD_GPU`에 대체 GPU를 쉼표로 나열하세요.
 
 Windows는 `PYTHONUTF8=1` 환경변수를 설정하고, 스크립트는 WSL 터미널에서 실행합니다.

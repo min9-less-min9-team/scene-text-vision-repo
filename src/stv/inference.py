@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from . import tracking
 from .config import Config, parse_config
 from .data import CHOICES, build_messages, is_numeric_options, load_image, load_split, subsample
 from .model import apply_init_adapter_config, add_lora, load_adapter_weights, load_model, set_image_budget
@@ -152,7 +153,10 @@ def infer(cfg: Config):
         os.remove(cache_path)
 
     if "answer" in df.columns:
-        evaluate(df, probs, name=f"{cfg.split} TTA{cfg.n_tta}")
+        acc = evaluate(df, probs, name=f"{cfg.split} TTA{cfg.n_tta}")
+        tracking.init(cfg, "infer")
+        tracking.summary({f"{cfg.split}/acc_tta{cfg.n_tta}": acc, f"{cfg.split}/n": len(df)})
+        tracking.finish()
     else:
         check_submission(df, probs, cfg)
     print("Saved:", save_outputs(df, probs, cfg, cfg.split))

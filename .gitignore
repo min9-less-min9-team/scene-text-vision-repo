@@ -22,6 +22,8 @@ __pycache__/
 .venv/
 venv/
 # local
+.env
+wandb/
 .DS_Store
 Thumbs.db
 synth/
