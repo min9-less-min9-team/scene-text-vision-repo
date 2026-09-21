@@ -24,8 +24,16 @@ s3.sh log / pull  ◀───────────────────�
 | `RUNPOD_API_KEY` | RunPod Console → Settings → **API Keys** → Create | pod 생성·삭제 권한이 필요하므로 Read/Write(또는 All) |
 | `RUNPOD_S3_ACCESS_KEY`, `RUNPOD_S3_SECRET_KEY` | RunPod Console → Settings → **S3 API Keys** → Create | access key는 `user_…`, secret은 `rps_…`. secret은 생성 직후에만 보입니다 |
 | `WANDB_API_KEY` | https://wandb.ai/authorize | 비워 두면 wandb 기록 없이 실행됩니다 |
-| `GITHUB_TOKEN` | GitHub → Settings → Developer settings → Fine-grained token | 이 repo에 **Contents: Read-only**만. pod가 private repo를 clone하는 데 씁니다 |
+| `GITHUB_TOKEN` | GitHub → Settings → Developer settings → Fine-grained token | pod가 private repo를 clone하는 데 씁니다. **Resource owner를 조직 `min9-less-min9-team`으로** 선택(개인 계정으로 두면 403) → Repository access에서 이 repo → Permissions **Contents: Read-only** |
 | `HF_TOKEN` (선택) | https://huggingface.co/settings/tokens | gated 모델을 쓰거나 다운로드 제한에 걸릴 때만 |
+
+> **키와 volume은 같은 RunPod 계정에서 만들어야 합니다.** 콘솔 좌상단에서 개인 계정/팀 계정을 전환할 수 있는데, 개인 계정에서 만든 API 키·S3 키로는 팀 계정의 volume이 보이지 않습니다(API 404, S3 `AccessDenied … not allowed for bucket`). 과금도 키를 만든 계정으로 나갑니다.
+
+토큰이 맞는지는 pod를 띄우기 전에 확인할 수 있습니다(`run`도 pod 생성 전에 같은 검사를 합니다).
+
+```bash
+git -c credential.helper= ls-remote https://토큰@github.com/min9-less-min9-team/scene-text-vision-repo.git feat/baseline
+```
 
 ### 1-2. Network Volume (팀에서 1개 만들어 공유하거나 각자 생성)
 
@@ -62,7 +70,7 @@ WANDB_ENTITY=our-team             # wandb 팀 이름. 비우면 개인 계정에
 WANDB_PROJECT=stv
 
 # --- pod 사양 ---
-RUNPOD_GPU="NVIDIA GeForce RTX 4090"
+RUNPOD_GPU="NVIDIA GeForce RTX 4090,NVIDIA GeForce RTX 5090"
 RUNPOD_GPU_COUNT=1
 RUNPOD_CLOUD=SECURE
 RUNPOD_DISK_GB=40
@@ -74,7 +82,8 @@ STV_BRANCH=feat/baseline
 | 변수 | 설명 |
 |---|---|
 | `STV_USER` | 결과가 `stv/outputs/{STV_USER}/{실험 이름}/`에 저장되므로 팀원끼리 겹치지 않게 |
-| `RUNPOD_GPU` | RunPod GPU type ID. 쉼표로 여러 개를 쓰면 앞에서부터 재고가 있는 것을 잡습니다. 값에 공백이 있으므로 **따옴표 필수**. 예: `"NVIDIA GeForce RTX 4090,NVIDIA RTX A6000"`, `"NVIDIA A100 80GB PCIe,NVIDIA A100-SXM4-80GB"`, `"NVIDIA L40S"` |
+| `RUNPOD_GPU` | RunPod GPU type ID. 쉼표로 여러 개를 쓰면 앞에서부터 재고가 있는 것을 잡습니다. 값에 공백이 있으므로 **따옴표 필수**. 기본은 4090 → 5090. volume이 있는 데이터센터에 있는 GPU만 잡히며, 재고가 없으면 그 데이터센터의 GPU별 재고·가격 표가 출력되므로 거기서 골라 추가하면 됩니다(예: `"NVIDIA RTX PRO 4500 Blackwell"`) |
+| `RUNPOD_S3_ENDPOINT`, `RUNPOD_S3_REGION` | (선택) S3 endpoint를 직접 지정. 비우면 `RUNPOD_DATACENTER`로 `https://s3api-{datacenter}.runpod.io`를 만듭니다 |
 | `RUNPOD_CLOUD` | Network Volume은 Secure Cloud에서만 붙으므로 `SECURE` 유지 |
 | `RUNPOD_DISK_GB` | 컨테이너 디스크. venv(약 15GB)와 압축을 푼 데이터가 들어갑니다 |
 | `RUNPOD_IMAGE` | pod 이미지. torch 등은 `uv sync`가 `uv.lock`대로 다시 설치하므로 CUDA 12.8 계열 드라이버가 되는 이미지면 됩니다 |
@@ -119,10 +128,29 @@ python scripts/runpod_launch.py run configs/sample.toml --name r32 -- --lora-r 3
 ### 처음에는 smoke test부터
 
 ```bash
-python scripts/runpod_launch.py run configs/sample.toml --name smoke --keep -- --max-train-samples 200 --max-infer-samples 50 --eval-steps 10
-bash scripts/s3.sh log smoke                        # 끝까지 도는지 확인
-python scripts/runpod_launch.py stop POD_ID         # --keep을 썼으므로 직접 삭제
+# 1) 학습 없이 zero-shot 추론 5문항: 키·volume·clone·wandb·저장·자동 삭제까지 약 4~8분(첫 실행은 패키지 설치 때문에 더 김), $0.1 안팎
+python scripts/runpod_launch.py run configs/sample.toml --name smoke --infer-only -- --split dev --max-infer-samples 5 --n-tta 1
+bash scripts/s3.sh log smoke                        # 마지막 줄이 "[job] exit code 0"이면 성공
+
+# 2) 학습까지 포함한 짧은 실행
+python scripts/runpod_launch.py run configs/sample.toml --name smoke-train -- --max-train-samples 100 --max-infer-samples 20 --eval-steps 5
 ```
+
+`--infer-only`는 `stv.inference --adapter-dir none`만 실행합니다(split은 `-- --split dev`처럼 지정, 기본 test). zero-shot 기준 점수를 잴 때도 쓸 수 있습니다.
+
+### GPU 재고가 없을 때
+
+pod를 만들지 못하면 과금 없이 바로 끝나고, 실패 사실이 화면과 `launch.log`(repo root, git 제외)에 남습니다. pod 생성 성공도 같은 파일에 기록됩니다.
+
+```
+[실패] yeseo/r32: GPU 재고 없음 (NVIDIA GeForce RTX 4090, NVIDIA GeForce RTX 5090) → pod를 만들지 못했습니다 (과금 없음)
+  데이터센터 EU-RO-1 (* = RUNPOD_GPU에 지정한 GPU)
+    NVIDIA RTX PRO 4500 Blackwell                   32GB  $0.72/h   재고 Low
+  * NVIDIA GeForce RTX 5090                         32GB  $0.99/h   재고 Low
+  * NVIDIA GeForce RTX 4090                         24GB  -         재고 없음
+```
+
+재고 "Low"는 표시와 달리 생성이 실패할 수 있습니다. 잠시 뒤 다시 시도하거나, 표에 있는 다른 GPU를 한 번만 지정해 실행하세요: `RUNPOD_GPU="NVIDIA RTX PRO 4500 Blackwell" python scripts/runpod_launch.py run …`
 
 ### 주의: pod는 GitHub의 코드를 받습니다
 
@@ -157,6 +185,7 @@ python scripts/runpod_launch.py stop POD_ID      # pod 삭제
 | `run` 옵션 | 설명 |
 |---|---|
 | `--name NAME` | 실험 이름. 같은 이름으로 다시 돌리면 같은 폴더·같은 wandb run에 이어 씁니다 → 새 실험은 새 이름으로 |
+| `--infer-only` | 학습 없이 zero-shot 추론만 |
 | `--keep` | 끝나도 pod를 삭제하지 않음(SSH로 들어가 디버깅할 때). **직접 `stop` 하지 않으면 계속 과금됩니다** |
 | `--dry-run` | API 요청 내용만 출력 |
 
@@ -234,14 +263,16 @@ bash scripts/s3.sh aws s3 cp s3://$RUNPOD_VOLUME_ID/stv/outputs/yeseo/r32/submis
 
 | 증상 | 원인·조치 |
 |---|---|
-| `RunPod API POST /pods → 4xx/5xx`, "no instances available" 류 | 그 데이터센터에 해당 GPU 재고 없음 → `RUNPOD_GPU`에 대체 GPU를 쉼표로 추가하거나 잠시 뒤 재시도 |
+| `[실패] … GPU 재고 없음` | 그 데이터센터에 해당 GPU 재고 없음 → 함께 출력된 재고 표를 보고 `RUNPOD_GPU`에 대체 GPU를 추가하거나 잠시 뒤 재시도 ("GPU 재고가 없을 때" 참고) |
+| `GitHub repo를 읽을 수 없습니다` (pod 생성 전) | `GITHUB_TOKEN`의 Resource owner가 조직이 아니거나 Contents 권한 없음, `STV_REPO`/`STV_BRANCH` 오타 |
+| API는 되는데 volume이 404, S3는 `AccessDenied … not allowed for bucket` | 키와 volume이 서로 다른 계정(개인/팀) 소속. 같은 계정에서 다시 발급 |
 | `→ 401` | `RUNPOD_API_KEY`가 틀렸거나 권한이 Read-only |
-| pod가 뜨고 1~2분 뒤 사라지고 `run.log`도 없음 | clone 실패: `GITHUB_TOKEN` 권한·만료, `STV_REPO`/`STV_BRANCH` 오타. `--keep`으로 다시 띄워 콘솔의 Logs 확인 |
+| pod가 뜨고 1~2분 뒤 사라짐 | pod 안에서 clone 실패. 이유는 `bash scripts/s3.sh log 이름`(clone 오류가 `run.log`에 남음) |
 | `run.log`에 `data.zip 없음` | 3번(데이터 업로드)을 안 했거나 다른 volume에 올림 |
 | `exit_code`가 0이 아님 | `LINES_N=200 bash scripts/s3.sh log 이름`으로 오류 확인. OOM이면 `-- --batch-size 1 --grad-accum 8` 또는 `--no-finetune-vision` |
 | `s3.sh`가 403/SignatureDoesNotMatch | S3 키가 API 키와 다른 것인지 확인(`user_…`/`rps_…`), `RUNPOD_DATACENTER`가 volume 위치와 같은지 확인 |
 | `s3.sh ls`에 방금 쓴 파일이 안 보임 | pod가 쓰는 중인 파일은 반영이 늦을 수 있음. 잠시 뒤 다시 |
-| wandb에 run이 없음 | `WANDB_API_KEY` 미설정, 또는 `WANDB_ENTITY` 팀에 본인이 속해 있지 않음 |
+| wandb에 run이 없음 | `WANDB_API_KEY` 미설정, 또는 `WANDB_ENTITY` 팀에 본인이 속해 있지 않음. wandb 오류는 실험을 멈추지 않고 `run.log`에 `⚠ wandb 초기화 실패`로만 남습니다 |
 | `--keep` pod가 실험 후에도 과금 | 정상 동작. `list`로 확인하고 `stop` |
 
 **보안**: `.env`는 절대 커밋하지 마세요. `GITHUB_TOKEN`은 pod 시작 명령에, 나머지 키는 pod 환경변수에 들어가 본인 RunPod 콘솔에서 보입니다. GitHub 토큰은 이 repo 읽기 전용으로만 발급하세요.
