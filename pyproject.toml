@@ -18,6 +18,9 @@ dependencies = [
 stv-train = "stv.train:main"
 stv-infer = "stv.inference:main"
 
+[dependency-groups]
+eda = ["scipy", "scikit-learn", "matplotlib", "ipykernel"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

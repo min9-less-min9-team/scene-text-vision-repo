@@ -1,0 +1,14 @@
+scope,hamming_distance,left_id,left_path,right_id,right_path,same_dimensions,brightness_difference,pixel_mae,pixel_abs_difference_p99
+test-test,0,test_1781.jpg,data/test/test_1781.jpg,test_2796.jpg,data/test/test_2796.jpg,True,0.00016438961029052734,0.8794126157407407,5.0
+train-test,0,train_1358.jpg,data/train/train_1358.jpg,test_3204.jpg,data/test/test_3204.jpg,True,0.00013715028762817383,0.9953650655864198,6.0
+train-test,0,train_4994.jpg,data/train/train_4994.jpg,test_5296.jpg,data/test/test_5296.jpg,True,3.1113624572753906e-05,2.222273341049383,18.0
+train-test,0,train_5453.jpg,data/train/train_5453.jpg,test_3013.jpg,data/test/test_3013.jpg,True,6.973743438720703e-06,1.0243803047839506,6.0
+train-test,0,train_6366.jpg,data/train/train_6366.jpg,test_2906.jpg,data/test/test_2906.jpg,True,8.207559585571289e-05,0.7716020447530865,5.0
+train-test,0,train_6386.jpg,data/train/train_6386.jpg,test_1890.jpg,data/test/test_1890.jpg,True,0.0024276375770568293,7.4313102816358025,27.0
+train-test,0,train_6619.jpg,data/train/train_6619.jpg,test_2570.jpg,data/test/test_2570.jpg,True,5.841255187988281e-05,1.5412080439814815,8.0
+train-train,0,train_1894.jpg,data/train/train_1894.jpg,train_3481.jpg,data/train/train_3481.jpg,True,0.00010579824447631836,0.8037774884259259,5.0
+train-train,0,train_3103.jpg,data/train/train_3103.jpg,train_3959.jpg,data/train/train_3959.jpg,True,9.387731552124023e-06,0.8132146990740741,6.0
+test-test,2,test_0652.jpg,data/test/test_0652.jpg,test_4732.jpg,data/test/test_4732.jpg,True,0.0005134940147400457,19.552485532407406,98.0
+test-test,4,test_0276.jpg,data/test/test_0276.jpg,test_6219.jpg,data/test/test_6219.jpg,False,0.010483175516128596,,
+test-test,4,test_0739.jpg,data/test/test_0739.jpg,test_2472.jpg,data/test/test_2472.jpg,True,0.00846320390701294,11.63374469521605,132.0
+train-train,4,train_0395.jpg,data/train/train_0395.jpg,train_4458.jpg,data/train/train_4458.jpg,False,0.002958327531814575,,
