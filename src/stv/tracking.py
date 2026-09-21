@@ -5,6 +5,7 @@ train → dev 추론 → test 추론이 한 run에 이어 기록되도록 run id
 """
 
 import os
+import uuid
 from dataclasses import asdict
 
 from .config import Config
@@ -20,6 +21,14 @@ def init(cfg: Config, job: str):
     global _run
     if not enabled() or _run is not None:
         return _run
+    try:
+        _run = _init(cfg, job)
+    except Exception as err:  # wandb 문제(키·네트워크·버전)로 실험이 죽지 않게
+        print(f"⚠ wandb 초기화 실패, 기록 없이 계속합니다: {err!r}", flush=True)
+    return _run
+
+
+def _init(cfg: Config, job: str):
     import wandb
 
     os.makedirs(cfg.output_dir, exist_ok=True)
@@ -27,10 +36,10 @@ def init(cfg: Config, job: str):
     if os.path.exists(id_path):
         run_id = open(id_path).read().strip()
     else:
-        run_id = wandb.util.generate_id()
+        run_id = uuid.uuid4().hex[:8]
         with open(id_path, "w") as fp:
             fp.write(run_id)
-    _run = wandb.init(
+    return wandb.init(
         project=os.environ.get("WANDB_PROJECT", "stv"),
         entity=os.environ.get("WANDB_ENTITY") or None,
         name=os.environ.get("WANDB_RUN_NAME") or os.path.basename(os.path.normpath(cfg.output_dir)),
@@ -39,7 +48,6 @@ def init(cfg: Config, job: str):
         config=asdict(cfg) if job == "train" else None,
         tags=[t for t in (os.environ.get("STV_USER"), os.environ.get("STV_ENV")) if t],
     )
-    return _run
 
 
 def log(metrics: dict, step: int | None = None):
