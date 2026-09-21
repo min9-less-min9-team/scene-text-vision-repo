@@ -19,10 +19,15 @@ def predict_probs(model, processor, df: pd.DataFrame, data_dir: str) -> np.ndarr
     probs = []
     for i, row in df.iterrows():
         messages = build_messages(row, data_dir, with_answer=False)
-        text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        # enable_thinking=False: Qwen3 계열이 <think>로 시작하지 않고 바로 답 글자를 내도록 (다른 템플릿은 무시)
+        text = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False, enable_thinking=False
+        )
         image = Image.open(os.path.join(data_dir, row["path"])).convert("RGB")
         inputs = processor(images=[image], text=[text], return_tensors="pt").to(model.device)
-        logits = model(**inputs).logits[0, -1, choice_ids]
+        # autocast: bf16 로드(--no-load-in-4bit) 시 float32 pixel_values와 dtype이 어긋나지 않도록
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            logits = model(**inputs).logits[0, -1, choice_ids]
         probs.append(logits.float().softmax(-1).cpu().numpy())
         if (i + 1) % 50 == 0:
             print(f"{i + 1}/{len(df)}")
@@ -33,7 +38,7 @@ def infer(cfg: Config):
     df = subsample(load_split(cfg, cfg.split), cfg.max_infer_samples, cfg.seed)
 
     adapter = cfg.adapter_dir or cfg.output_dir
-    model, processor = load_model(cfg.model_id if adapter == "none" else adapter)
+    model, processor = load_model(cfg.model_id if adapter == "none" else adapter, cfg.load_in_4bit)
     FastVisionModel.for_inference(model)
 
     probs = predict_probs(model, processor, df, cfg.data_dir)

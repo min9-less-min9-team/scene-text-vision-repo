@@ -12,7 +12,7 @@ def train(cfg: Config):
     train_dataset = to_sft_dataset(train_df, cfg.data_dir)
     print(f"train samples: {len(train_dataset)}")
 
-    model, processor = load_model(cfg.model_id)
+    model, processor = load_model(cfg.model_id, cfg.load_in_4bit)
     model = add_lora(model, cfg)
     FastVisionModel.for_training(model)
 

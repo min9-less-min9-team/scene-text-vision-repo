@@ -9,6 +9,7 @@ class Config:
     data_dir: str = "data"
     output_dir: str = "outputs/qwen2_5_vl_3b_lora"
     seed: int = 42
+    load_in_4bit: bool = True  # false면 bf16 그대로 로드 (zero-shot probe용)
 
     # data
     max_train_samples: int = 200  # MVP: 일부만 사용, 0이면 전체
@@ -27,7 +28,7 @@ class Config:
 
     # inference
     adapter_dir: str = ""  # 비우면 output_dir 사용, "none"이면 zero-shot
-    split: str = "test"  # test | valid | dev
+    split: str = "test"  # test | valid | dev | train (--valid-ratio 0이면 train.csv 전체)
     max_infer_samples: int = 0
 
 
