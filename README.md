@@ -4,7 +4,7 @@ SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 0
 이미지 속 글자를 읽어 4지선다(a/b/c/d) 정답을 고르는 VLM을 만듭니다.
 
 - 대회 페이지: https://www.kaggle.com/competitions/ssafy-16-2-ai-9-21-9-28
-- 자원: Colab Pro 1개(27B 전용), RTX 50xx 16GB PC 4대(9B 이하·검증·보조 모델)
+- 자원: Colab Pro 1개(27B 전용), RTX 5070 Ti 16GB PC 4대(9B 이하·검증·보조 모델)
 
 ## 처음 오면 이 순서로 읽기 (15분)
 
