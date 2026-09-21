@@ -53,9 +53,16 @@ def need(*keys):
     return [os.environ[k] for k in keys]
 
 
-def api(method: str, path: str, body=None):
+def log_line(msg: str):
+    """화면 + launch.log(repo root, git 제외)에 기록."""
+    print(msg)
+    with open(ROOT / "launch.log", "a", encoding="utf-8") as fp:
+        fp.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+
+
+def api(method: str, path: str, body=None, url: str = "", fatal: bool = True):
     req = urllib.request.Request(
-        API + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+        url or API + path, method=method, data=json.dumps(body).encode() if body is not None else None,
         # User-Agent: 기본값(Python-urllib)은 Cloudflare가 403(1010)으로 막음
         headers={"Authorization": f"Bearer {os.environ['RUNPOD_API_KEY']}", "Content-Type": "application/json",
                  "User-Agent": "stv-runpod-launch/1.0"},
@@ -65,7 +72,26 @@ def api(method: str, path: str, body=None):
             raw = resp.read()
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as err:
-        sys.exit(f"RunPod API {method} {path} → {err.code}\n{err.read().decode(errors='replace')}")
+        detail = err.read().decode(errors="replace")
+        if not fatal:
+            return {"error": detail, "status": err.code}
+        sys.exit(f"RunPod API {method} {path} → {err.code}\n{detail}")
+
+
+def gpu_stock(volume: str, gpu_ids: list[str]) -> str:
+    """volume이 있는 데이터센터의 GPU별 재고·가격 (pod 생성 실패 시 원인 확인용)."""
+    dc = (api("GET", f"/networkvolumes/{volume}", fatal=False) or {}).get("dataCenterId", "")
+    query = ('query{gpuTypes{id memoryInGb lowestPrice(input:{gpuCount:1,secureCloud:true,dataCenterId:"%s"})'
+             "{stockStatus uninterruptablePrice}}}" % dc)
+    data = api("POST", "", {"query": query}, url="https://api.runpod.io/graphql", fatal=False) or {}
+    rows = []
+    for gpu in (data.get("data") or {}).get("gpuTypes") or []:
+        low = gpu.get("lowestPrice") or {}
+        if gpu["id"] in gpu_ids or low.get("stockStatus"):
+            mark = "*" if gpu["id"] in gpu_ids else " "
+            rows.append((low.get("uninterruptablePrice") or 99, f"  {mark} {gpu['id']:45s} {gpu['memoryInGb']:4d}GB  "
+                         f"{'$%s/h' % low['uninterruptablePrice'] if low.get('uninterruptablePrice') else '-':9s} 재고 {low.get('stockStatus') or '없음'}"))
+    return f"  데이터센터 {dc or '?'} (* = RUNPOD_GPU에 지정한 GPU)\n" + "\n".join(r for _, r in sorted(rows))
 
 
 def check_repo_access(clone_url: str, branch: str, token: str):
@@ -105,7 +131,7 @@ def run(args):
     body = {
         "name": f"stv-{user}-{name}"[:60],
         "imageName": os.environ.get("RUNPOD_IMAGE", "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04"),
-        "gpuTypeIds": [g.strip() for g in os.environ.get("RUNPOD_GPU", "NVIDIA GeForce RTX 4090").split(",") if g.strip()],
+        "gpuTypeIds": [g.strip() for g in os.environ.get("RUNPOD_GPU", "NVIDIA GeForce RTX 4090,NVIDIA GeForce RTX 5090").split(",") if g.strip()],
         "gpuCount": int(os.environ.get("RUNPOD_GPU_COUNT", 1)),
         "cloudType": os.environ.get("RUNPOD_CLOUD", "SECURE"),
         "containerDiskInGb": int(os.environ.get("RUNPOD_DISK_GB", 40)),
@@ -119,7 +145,18 @@ def run(args):
         body["env"] = {k: "***" if "KEY" in k or "TOKEN" in k else v for k, v in env.items()}
         print(json.dumps(body, indent=2, ensure_ascii=False).replace(token, "***") if token else json.dumps(body, indent=2, ensure_ascii=False))
         return
-    pod = api("POST", "/pods", body)
+    pod = api("POST", "/pods", body, fatal=False)
+    if "id" not in pod:
+        gpus = ", ".join(body["gpuTypeIds"])
+        # "no instances currently available" = 재고 소진, "could not find any pods with required specifications" = 그 데이터센터에 없는 GPU
+        if any(m in str(pod.get("error", "")).lower() for m in ("no instances", "could not find any pods")):
+            log_line(f"[실패] {user}/{name}: GPU 재고 없음 ({gpus}) → pod를 만들지 못했습니다 (과금 없음)")
+            print(gpu_stock(volume, body["gpuTypeIds"]))
+            sys.exit("잠시 뒤 다시 시도하거나 .env의 RUNPOD_GPU에 재고가 있는 GPU를 쉼표로 추가하세요")
+        log_line(f"[실패] {user}/{name}: pod 생성 오류 {pod.get('status')} {pod.get('error')}")
+        sys.exit(1)
+    log_line(f"[생성] {user}/{name}: pod {pod['id']} {pod.get('machine', {}).get('gpuTypeId') or body['gpuTypeIds'][0]} "
+             f"${pod.get('costPerHr', '?')}/h mode={env['STV_MODE']} extra={' '.join(args.extra)}")
     out = f"stv/outputs/{user}/{name}"
     print(f"pod 생성: {pod['id']}  ({pod.get('machine', {}).get('gpuTypeId') or body['gpuTypeIds'][0]}, ${pod.get('costPerHr', '?')}/h)")
     print(f"  콘솔     https://console.runpod.io/pods?id={pod['id']}")
