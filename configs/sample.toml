@@ -1,0 +1,28 @@
+# 사용: uv run stv-train --config configs/sample.toml
+#       uv run stv-infer --config configs/sample.toml --split dev
+# 키 = src/stv/config.py의 Config 필드명. CLI 플래그가 이 파일보다 우선합니다.
+
+model_id = "unsloth/Qwen2.5-VL-3B-Instruct-bnb-4bit"
+data_dir = "data"            # train.csv / dev.csv / test.csv + train/ dev/ test/ 이미지
+output_dir = "outputs/qwen2_5_vl_3b_lora"
+seed = 42
+
+# data
+max_train_samples = 200      # smoke용. 0이면 전체(train 6,714행)
+valid_ratio = 0.1            # train.csv에서 떼어내는 검증 비율
+
+# LoRA
+lora_r = 8
+lora_alpha = 16
+finetune_vision = false      # true면 vision encoder도 학습 (VRAM 증가)
+
+# train
+epochs = 1.0
+batch_size = 1
+grad_accum = 4
+lr = 1e-4
+
+# inference
+adapter_dir = ""             # ""=output_dir의 adapter, "none"=zero-shot
+split = "test"               # test | valid | dev (dev는 answer1~5 다수결로 채점)
+max_infer_samples = 0        # 0이면 전체
