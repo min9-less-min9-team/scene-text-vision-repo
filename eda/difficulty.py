@@ -1,7 +1,9 @@
 """Zero-shot difficulty probe: combine a/b/c/d probabilities from several models into per-sample difficulty.
 
 Inputs are the `{split}_probs.npz` files written by `stv.inference` (`avg` [N,4], `ids`).
-Probes are passed as an ordered dict, smallest model first:  {"2b": "outputs/probe_2b", "4b": "outputs/probe_4b"}
+Probes are passed as an ordered dict, smallest model first. Paths may be absolute, e.g. on Colab the npz live on Drive:
+    {"2b": "/content/drive/MyDrive/stv/outputs/probe_2b", "4b": "/content/drive/MyDrive/stv/outputs/probe_4b"}
+Labels are read from the repo's `data/` (unpacked by `scripts/setup.sh`).
 """
 
 from __future__ import annotations
