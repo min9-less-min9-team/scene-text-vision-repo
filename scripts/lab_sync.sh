@@ -6,10 +6,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 CONTAINER=${1:-ssafy-ai}
+export MSYS_NO_PATHCONV=1  # Windows Git Bash가 /workspace 경로를 C:/... 로 바꾸지 않도록
 DEST=/workspace/scene-text-vision-repo
 
 docker exec "$CONTAINER" mkdir -p "$DEST"
 # tracked + untracked(ignore 제외) 파일만 전송 → data/, .venv/, outputs/는 빠짐
-git ls-files -co --exclude-standard -z | tar -c --null -T - | docker exec -i "$CONTAINER" tar -x -C "$DEST"
+if git ls-files >/dev/null 2>&1; then
+    git ls-files -co --exclude-standard -z | tar -c --null -T - | docker exec -i "$CONTAINER" tar -x -C "$DEST"
+else
+    # git을 못 쓰는 경우 (예: Windows git으로 \\wsl.localhost 경로 접근 시 dubious ownership)
+    tar -c --exclude=.git --exclude=.venv --exclude=data --exclude=outputs --exclude=__pycache__ \
+        --exclude=unsloth_compiled_cache . | docker exec -i "$CONTAINER" tar -x -C "$DEST"
+fi
 docker exec "$CONTAINER" bash "$DEST/scripts/setup.sh"
 echo "[lab_sync] $CONTAINER:$DEST 동기화 완료 → notebooks/lab.ipynb"
