@@ -17,6 +17,7 @@ dependencies = [
 [project.scripts]
 stv-train = "stv.train:main"
 stv-infer = "stv.inference:main"
+stv-bench = "stv.bench:main"
 
 [dependency-groups]
 eda = ["scipy", "scikit-learn", "matplotlib", "ipykernel"]

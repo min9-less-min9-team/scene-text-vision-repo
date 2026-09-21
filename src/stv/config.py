@@ -30,6 +30,7 @@ class Config:
     adapter_dir: str = ""  # 비우면 output_dir 사용, "none"이면 zero-shot
     split: str = "test"  # test | valid | dev | train (--valid-ratio 0이면 train.csv 전체)
     max_infer_samples: int = 0
+    infer_batch_size: int = 8
 
 
 def load_config(path: str = "", **overrides) -> Config:
