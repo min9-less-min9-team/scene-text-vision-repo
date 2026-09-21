@@ -31,6 +31,15 @@ class Config:
     max_infer_samples: int = 0
 
 
+def load_config(path: str = "", **overrides) -> Config:
+    """For notebooks: toml file + keyword overrides."""
+    values = {}
+    if path:
+        with open(path, "rb") as fp:
+            values = tomllib.load(fp)
+    return Config(**{**values, **overrides})
+
+
 def parse_config() -> Config:
     """Every Config field becomes a --kebab-case CLI flag.
 
