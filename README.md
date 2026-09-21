@@ -40,14 +40,14 @@ SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 0
 
 ```
 pyproject.toml, uv.lock   uv 환경 (torch cu128 인덱스)
-configs/     sample.toml(기본), lab.toml(Docker lab: 캐시된 모델을 오프라인으로 사용)
+configs/     sample.toml(기본)
 src/stv/     config.py    Config dataclass. 모든 필드가 toml 키이자 --kebab-case CLI 플래그
              data.py      csv 로드, 프롬프트/messages 생성, train/valid/dev/test 분할
              model.py     Unsloth 4bit 로드, LoRA 부착
              train.py     SFTTrainer 학습 → LoRA adapter 저장
              inference.py a/b/c/d 다음 토큰 로짓 → 확률, submission csv + probs npz 저장
-scripts/     env.sh(환경 감지), setup.sh(환경 구성·데이터 연결), run.sh(train→dev→test), lab_sync.sh(Docker lab으로 코드 복사)
-notebooks/   colab.ipynb, lab.ipynb
+scripts/     env.sh(환경 감지), setup.sh(환경 구성·데이터 연결), run.sh(train→dev→test)
+notebooks/   colab.ipynb
 eda/         run_eda.py(이미지 EDA), text_eda_vqa.ipynb(텍스트 EDA), common.py(공용 헬퍼), report.md·tables·plots
 docs/        PLAN.md, DAY1_PLAN.md, PAPERS.md, EDA.md
 .github/     이슈 템플릿(task, insight), 첫날 이슈 원문
@@ -93,17 +93,5 @@ bash scripts/run.sh configs/sample.toml --max-train-samples 0 --output-dir outpu
 | **로컬 PC (RTX 50xx)** | `bash scripts/setup.sh` 후 위 `uv run ...` 명령. torch는 cu128 휠로 고정돼 있습니다. |
 | **RunPod** | `bash scripts/setup.sh /workspace/data.zip` → `nohup bash scripts/run.sh configs/sample.toml > run.log 2>&1 &`. HF·uv 캐시는 `/workspace`(영구 볼륨)에 둡니다. |
 | **Colab** | `notebooks/colab.ipynb`를 위에서부터 실행. 데이터는 `MyDrive/stv/data.zip`, 결과는 Drive에 저장. private repo라 clone 시 토큰이 필요합니다. |
-| **Docker Jupyter lab** (`ssafy-ai`, http://127.0.0.1:8888) | 아래 참고 |
-
-### Docker Jupyter lab
-
-컨테이너에 설치된 런타임(시스템 python + torch/unsloth/trl)을 그대로 쓰고 uv venv는 쓰지 않습니다. 데이터는 컨테이너의 `/workspace`에 있는 것을 씁니다.
-
-1. WSL 터미널에서 `bash scripts/lab_sync.sh` — 코드를 컨테이너 `/workspace/scene-text-vision-repo`로 복사하고 `stv`를 설치합니다. **`.py`/toml을 고칠 때마다 다시 실행**합니다(노트북 셀만 고쳤으면 불필요).
-2. VS Code에서 `notebooks/lab.ipynb`를 열고 커널을 *Existing Jupyter Server* → `http://127.0.0.1:8888`(토큰 `lab`)로 선택해 실행합니다.
-
-- 컨테이너의 HF 미러가 닿지 않아 `HF_HUB_OFFLINE=1`로 캐시된 모델만 씁니다(`configs/lab.toml`: `Qwen/Qwen2.5-VL-3B-Instruct`). 다른 모델을 받으려면 `HF_HUB_OFFLINE=0 HF_ENDPOINT=https://huggingface.co`로 실행합니다.
-- 결과물은 컨테이너 안에 생깁니다: `docker cp ssafy-ai:/workspace/scene-text-vision-repo/outputs ./outputs`
-- 여기서 학습한 adapter는 base 모델 경로가 컨테이너 내부 경로로 기록됩니다. 다른 환경에서 쓰려면 `adapter_config.json`의 `base_model_name_or_path`를 hub id로 바꿉니다.
 
 Windows는 `PYTHONUTF8=1` 환경변수를 설정하고, 스크립트는 WSL 터미널에서 실행합니다.
