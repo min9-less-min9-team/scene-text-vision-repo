@@ -16,9 +16,9 @@ SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 0
 
 ## 한 줄 전략
 
-**Qwen3.5-27B + 보기 셔플 LoRA(정답 글자 1토큰 학습) + a/b/c/d 로짓 채점 + 보기 순서 TTA**를 골격으로 하고,
-원본 해상도에 맞춘 visual token, 불확실 문항만 crop·고해상도 재추론, 계열이 다른 모델(한국어 특화 VLM 포함)의 로그확률 앙상블을 얹습니다.
-근거는 16기 1회차 최종 1위·2위 공개 코드입니다(`docs/PLAN.md` 2절).
+**Qwen3-VL-4B(Unsloth 4bit) + 보기 셔플 LoRA(정답 글자 토큰만 loss) + a/b/c/d 로짓 채점 + 보기 순서 TTA**가 현재 베이스라인입니다(`src/stv`, RTX 5060 Ti 16GB 검증: zero-shot 91.6% → 파인튜닝 94.4% → +TTA 95.2%, 검증 500문항).
+그 위에 더 큰 모델(8B/27B), 불확실 문항만 crop·고해상도 재추론, 계열이 다른 모델의 로그확률 앙상블을 얹습니다.
+근거는 16기 1회차 최종 1위·2위 공개 코드입니다(`docs/PLAN.md` 2절). 원본 노트북은 `notebooks/unsloth_5060ti.ipynb`입니다.
 
 ## 이슈 규약
 
@@ -31,8 +31,8 @@ SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 0
 
 ## 팀 공유 규약 (첫날 확정)
 
-- **검증 분할**: 이미지 단위 그룹 분할(`train.csv`의 10%, seed 42 → `--split valid`). 별도로 `dev.csv`(annotator 5명 답의 다수결로 채점 → `--split dev`)를 공통 검증셋으로 씁니다.
-- **확률 파일**: `{split}_probs.npz` (`avg` [N,4], `ids`). 행 순서는 해당 csv 순서. `stv.inference`가 이 형식으로 저장합니다.
+- **검증 분할**: `train.csv`에서 500문항(`valid_size=500`, `split_seed=42` → `--split valid`). 모든 실험과 공개 어댑터(`ssafyjinhyeok/KFC`)가 같은 분할을 쓰므로 바꾸지 않습니다. `dev.csv`는 5명 답의 다수결(동률 제외)로 채점하지만 라벨 노이즈가 커서 참고용입니다(`docs/EDA.md`).
+- **확률 파일**: `{split}_probs.npz` (`avg` [N,4], `ids`). 행 순서는 해당 csv 순서. `stv-train`(valid)·`stv-infer`가 이 형식으로 저장하고 `stv-ensemble`이 평균합니다.
 - **제출 예산**: 하루 20회(1회차 규정 기준, 공개 후 재확인). 제출 담당자 1명. 챔피언과 다른 문항 수 D가 √D 문턱을 넘는 후보만 제출합니다.
 - **산출물 위치**: Colab `/content`는 세션 회수 시 사라지므로 adapter·npz·csv는 반드시 Drive에 둡니다(`--output-dir`).
 
@@ -40,14 +40,16 @@ SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 0
 
 ```
 pyproject.toml, uv.lock   uv 환경 (torch cu128 인덱스)
-configs/     sample.toml(기본)
+configs/     sample.toml(기본 설정, 주석 참고)
 src/stv/     config.py    Config dataclass. 모든 필드가 toml 키이자 --kebab-case CLI 플래그
-             data.py      csv 로드, 프롬프트/messages 생성, train/valid/dev/test 분할
-             model.py     Unsloth 4bit 로드, LoRA 부착
-             train.py     SFTTrainer 학습 → LoRA adapter 저장
-             inference.py a/b/c/d 다음 토큰 로짓 → 확률, submission csv + probs npz 저장
+             data.py      csv 로드, 프롬프트(변형 a/b/c), 검증 분할, dev 다수결, 보기 셔플 Dataset
+             model.py     Unsloth 4bit 로드, LoRA 부착, 시작 어댑터 로드, 픽셀 예산
+             train.py     정답 토큰만 loss, eval_steps마다 검증 → best 어댑터 저장, 최종 valid TTA
+             inference.py a/b/c/d 로짓 → 확률, 보기 순서 TTA, 이어하기 캐시, submission csv + probs npz
+             ensemble.py  실험별 확률 평균 → 검증 점수 + 앙상블 제출 파일
+             bench.py     추론 최대 배치 크기 측정
 scripts/     env.sh(환경 감지), setup.sh(환경 구성·데이터 연결), run.sh(train→dev→test)
-notebooks/   colab.ipynb
+notebooks/   colab.ipynb, unsloth_5060ti.ipynb(베이스라인 원본 노트북, 단독 실행용)
 eda/         run_eda.py(이미지 EDA), text_eda_vqa.ipynb(텍스트 EDA), common.py(공용 헬퍼), report.md·tables·plots
 docs/        PLAN.md, DAY1_PLAN.md, PAPERS.md, EDA.md
 .github/     이슈 템플릿(task, insight), 첫날 이슈 원문
@@ -73,16 +75,18 @@ data/sample_submission.csv  id,answer
 ```bash
 bash scripts/setup.sh [data.zip | data_dir]      # uv 설치 → uv sync → 데이터 연결 → GPU 확인
 
-uv run stv-train --config configs/sample.toml                          # 200샘플 smoke
-uv run stv-train --config configs/sample.toml --max-train-samples 0    # 전체 학습
-uv run stv-infer --config configs/sample.toml --split dev              # dev 정확도
-uv run stv-infer --config configs/sample.toml --split test             # submission_test.csv, test_probs.npz
-uv run stv-infer --config configs/sample.toml --split dev --adapter-dir none   # zero-shot
+uv run stv-train --config configs/sample.toml --max-train-samples 48 --valid-size 24 --eval-steps 3 --output-dir outputs/quick   # 동작 확인
+uv run stv-train --config configs/sample.toml                          # 전체 학습 (검증 500, best 어댑터 저장, 최종 valid TTA)
+uv run stv-infer --config configs/sample.toml --split test             # submission_test.csv, test_probs.npz (끊기면 재실행 시 이어서)
+uv run stv-infer --config configs/sample.toml --split valid --adapter-dir none   # zero-shot
+uv run stv-infer --config configs/sample.toml --init-adapter ssafyjinhyeok/KFC --adapter-dir none --split valid   # 공개 어댑터 그대로
+uv run stv-ensemble outputs/qwen3_vl_4b outputs/run_seed1              # 확률 평균 → 검증 점수 + outputs/ensemble/submission_test.csv
 
-bash scripts/run.sh configs/sample.toml --max-train-samples 0 --output-dir outputs/full   # train→dev→test 한 번에
+bash scripts/run.sh configs/sample.toml --output-dir outputs/full      # train→dev→test 한 번에
 ```
 
-산출물은 `--output-dir`(기본 `outputs/qwen2_5_vl_3b_lora`)에 adapter, `submission_{split}.csv`, `{split}_probs.npz`로 저장됩니다.
+산출물은 `--output-dir`(기본 `outputs/qwen3_vl_4b`)에 adapter, `log.txt`(loss·검증 정확도), `submission_{split}.csv`, `{split}_probs.npz`로 저장됩니다.
+학습 설정을 바꿀 때는 `--output-dir`를 다르게 주세요(어댑터가 덮어써짐). OOM이면 `batch_size 1 / grad_accum 8` → `finetune_vision false` → `train_max_pixels` 축소 → `lora_r 8` 순으로 줄입니다.
 
 ## 환경별 사용법
 

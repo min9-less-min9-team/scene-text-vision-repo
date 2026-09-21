@@ -1,12 +1,13 @@
 [project]
 name = "stv"
 version = "0.1.0"
-description = "Scene-text VQA (4-choice) baseline: Qwen2.5-VL + Unsloth QLoRA"
+description = "Scene-text VQA (4-choice) baseline: Qwen3-VL-4B + Unsloth QLoRA"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "unsloth",
     "trl",
-    "datasets",
+    "peft",
+    "safetensors",
     "pillow",
     "pandas",
     "numpy",
@@ -18,6 +19,7 @@ dependencies = [
 stv-train = "stv.train:main"
 stv-infer = "stv.inference:main"
 stv-bench = "stv.bench:main"
+stv-ensemble = "stv.ensemble:main"
 
 [dependency-groups]
 eda = ["scipy", "scikit-learn", "matplotlib", "ipykernel"]

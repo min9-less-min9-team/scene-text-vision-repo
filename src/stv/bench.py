@@ -1,12 +1,10 @@
 """Find the largest inference batch size that fits: grows the batch until CUDA OOM.
 
-    uv run stv-bench --model-id unsloth/Qwen3.5-4B --no-load-in-4bit --adapter-dir none
+    uv run stv-bench --config configs/sample.toml --adapter-dir none
 
 Each batch size is measured on the worst case (the largest images of the split, which produce the most
 visual tokens) for peak VRAM, and on random batches for throughput.
 """
-
-from unsloth import FastVisionModel  # isort: skip
 
 import time
 
@@ -15,8 +13,8 @@ from PIL import Image
 
 from .config import Config, parse_config
 from .data import load_split
-from .inference import predict_batch
-from .model import load_model
+from .inference import load_for_inference, predict_batch
+from .model import set_image_budget
 
 BATCH_SIZES = [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256]
 MAX_BATCH = BATCH_SIZES[-1]
@@ -35,26 +33,25 @@ def bench(cfg: Config):
     random_rows = [row for _, row in df.sample(n=min(len(df), MAX_BATCH * TIMED_BATCHES), random_state=cfg.seed).iterrows()]
 
     torch.cuda.set_per_process_memory_fraction(MEMORY_FRACTION)
-    adapter = cfg.adapter_dir or cfg.output_dir
-    model, processor = load_model(cfg.model_id if adapter == "none" else adapter, cfg.load_in_4bit)
-    FastVisionModel.for_inference(model)
+    model, processor = load_for_inference(cfg)
+    set_image_budget(processor, cfg.infer_max_pixels, cfg.min_pixels)
     total = torch.cuda.get_device_properties(0).total_memory / 2**30
     print(f"model loaded: {torch.cuda.memory_allocated() / 2**30:.2f} GiB / {total:.1f} GiB", flush=True)
     print(f"{'batch':>6} {'peak GiB (worst case)':>22} {'img/s (random)':>15}", flush=True)
 
-    predict_batch(model, processor, worst[:1], cfg.data_dir)  # warmup
+    predict_batch(model, processor, worst[:1], cfg)  # warmup
     best, last_ok = None, None
     for batch_size in BATCH_SIZES:
         try:
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()
-            predict_batch(model, processor, worst[:batch_size], cfg.data_dir)
+            predict_batch(model, processor, worst[:batch_size], cfg)
             peak = torch.cuda.max_memory_allocated() / 2**30
 
             torch.cuda.synchronize()
             start = time.perf_counter()
             for k in range(TIMED_BATCHES):
-                predict_batch(model, processor, random_rows[k * batch_size : (k + 1) * batch_size], cfg.data_dir)
+                predict_batch(model, processor, random_rows[k * batch_size : (k + 1) * batch_size], cfg)
             torch.cuda.synchronize()
             speed = TIMED_BATCHES * batch_size / (time.perf_counter() - start)
         except torch.OutOfMemoryError:
