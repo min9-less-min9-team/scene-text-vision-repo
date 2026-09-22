@@ -4,14 +4,15 @@ SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 0
 이미지 속 글자를 읽어 4지선다(a/b/c/d) 정답을 고르는 VLM을 만듭니다.
 
 - 대회 페이지: https://www.kaggle.com/competitions/ssafy-16-2-ai-9-21-9-28
-- 자원: Colab Pro 1개(27B 전용), RTX 5070 Ti 16GB PC 4대(9B 이하·검증·보조 모델)
+- 자원: Colab Pro 1개(27B 전용), RTX 5070 Ti 16GB PC 4대(9B 이하·검증·보조 모델), RunPod GPU pod(4090/5090, 팀 volume 공유)
 
 ## 처음 오면 이 순서로 읽기 (15분)
 
 1. `docs/DAY1_PLAN.md`: 첫날 시간표, 자리별 역할, 첫날 결정 규칙, 옛 기법의 유효성 판정.
 2. `docs/PLAN.md`: 직전 대회 1·2위 코드·디스커션 분석, 규정, 모델 선택, 리스크.
 3. `docs/PAPERS.md`: 논문 조사와 "아직 안 써본" 신규 접근법 우선순위.
-4. Issues 탭: 오늘 할 일은 전부 `task` 이슈로 올라가 있습니다. 하나를 맡으면 assignee를 자기로 바꿉니다.
+4. `docs/RUNPOD.md`: RunPod GPU pod를 켜고(`up`) 웹 Jupyter에서 `notebooks/baseline.ipynb`를 돌린 뒤 끄는(`down`) 방법.
+5. Issues 탭: 오늘 할 일은 전부 `task` 이슈로 올라가 있습니다. 하나를 맡으면 assignee를 자기로 바꿉니다.
 
 ## 한 줄 전략
 
@@ -31,33 +32,57 @@ SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 0
 ## 팀 공유 규약 (첫날 확정)
 
 - **검증 분할**: 이미지 단위 그룹 분할, 시드와 id 목록을 Drive에 고정. 모든 모델은 같은 분할로 검증합니다.
-- **확률 파일**: `*_probs.npz` (`avg` [N,4], `runs` [T,N,4], `ids`). 행 순서는 `test.csv` 순서. `scripts/vqa_textmc.py`가 이 형식으로 저장합니다.
-- **제출 예산**: 하루 20회(1회차 규정 기준, 공개 후 재확인). 제출 담당자 1명. 챔피언과 다른 문항 수 D가 √D 문턱을 넘는 후보만 제출합니다(`scripts/blend_probs.py`가 출력).
-- **산출물 위치**: Colab `/content`는 세션 회수 시 사라지므로 adapter·npz·csv는 반드시 Drive에 둡니다.
+- **확률 파일**: `*_probs.npz` (`avg` [N,4], `runs` [T,N,4], `ids`). 행 순서는 `test.csv` 순서. `src/textmc/vqa_textmc.py`가 이 형식으로 저장합니다. `notebooks/baseline.ipynb`는 `probs_test_*.npy`([N,4], test.csv 순서)로 저장하므로 결합 시 `avg`로 감싸 맞춥니다.
+- **제출 예산**: 하루 20회(1회차 규정 기준, 공개 후 재확인). 제출 담당자 1명. 챔피언과 다른 문항 수 D가 √D 문턱을 넘는 후보만 제출합니다(`src/textmc/blend_probs.py`가 출력).
+- **산출물 위치**: Colab `/content`는 세션 회수 시 사라지므로 adapter·npz·csv는 반드시 Drive에 둡니다. RunPod는 `/workspace/stv/outputs/{이름}/`(Network Volume)에 둡니다.
 
 ## 레포 구조
 
 ```
-docs/        PLAN.md, DAY1_PLAN.md, PAPERS.md
-scripts/     vqa_textmc.py(학습·추론·TTA·불확실도), inspect_data.py(데이터 점검), blend_probs.py(확률 결합), ocr_extract.py(선택)
-notebooks/   colab_runbook.ipynb (Colab 실행 순서)
+docs/        PLAN.md, DAY1_PLAN.md, PAPERS.md, EDA.md, RUNPOD.md(RunPod 환경 가이드)
+notebooks/   baseline.ipynb (RunPod/로컬 GPU: Qwen3-VL-4B + Unsloth QLoRA, wandb)
+             colab_runbook.ipynb (Colab: src/textmc 파이프라인 실행 순서)
+src/textmc/  vqa_textmc.py(학습·추론·TTA·불확실도), inspect_data.py(데이터 점검), blend_probs.py(확률 결합), ocr_extract.py(선택)
+scripts/     runpod.py(pod 켜기/끄기), runpod_bootstrap.sh(pod 안 환경 준비), s3.sh(volume 업로드·다운로드), env.sh
+eda/         EDA 노트북·결과 (docs/EDA.md 요약)
 .github/     이슈 템플릿(task, insight), 첫날 이슈 원문
 ```
 
-## 스크립트 요약
+## 두 가지 실행 경로
+
+| | `notebooks/baseline.ipynb` | `src/textmc/` + `notebooks/colab_runbook.ipynb` |
+|---|---|---|
+| 환경 | RunPod pod(웹 Jupyter) 또는 로컬 GPU. `uv sync` | Colab A100 / 5070 Ti PC. `pip` |
+| 모델 | `unsloth/Qwen3-VL-4B-Instruct-unsloth-bnb-4bit` (Unsloth QLoRA) | `Qwen/Qwen3.5-27B` 등 (transformers + peft) |
+| 특징 | 720×960 고정, 정답 글자만 loss + label smoothing, wandb 기록, 설정 해시로 실험 자동 구분 | CLI 모드(dryrun/smoke/zeroshot/train/infer), 불확실 문항 재추론, gated 결합, OCR 힌트 |
+| 시작 | `docs/RUNPOD.md` | 아래 "스크립트 요약" |
+
+## RunPod (baseline.ipynb)
+
+```bash
+cp .env.example .env                     # 키·volume ID 채우기 (docs/RUNPOD.md 1~2절)
+bash scripts/s3.sh push-data data.zip    # 데이터 업로드 (volume당 1회)
+uv run scripts/runpod.py up --open       # pod 생성 → Jupyter 브라우저로 열림 → notebooks/baseline.ipynb 실행
+uv run scripts/runpod.py down            # 끝나면 반드시 (과금 중지)
+bash scripts/s3.sh pull-sub              # 제출 파일 내려받기
+```
+
+## 스크립트 요약 (src/textmc, Colab/PC)
 
 ```
-python scripts/inspect_data.py --root <데이터폴더>                      # 컬럼·해상도·정답 분포·중복 점검
-python scripts/vqa_textmc.py --mode dryrun   --root <데이터폴더>          # torch 없이 형식 검증
-python scripts/vqa_textmc.py --mode smoke    --root ... --model-id Qwen/Qwen3.5-27B
-python scripts/vqa_textmc.py --mode zeroshot --root ... --model-id Qwen/Qwen3.5-27B --tta-perms 2
-python scripts/vqa_textmc.py --mode all      --root ... --model-id Qwen/Qwen3.5-27B --epochs 1 --lr 1e-4
-python scripts/blend_probs.py --primary A_probs.npz --secondary B_probs.npz --strategy gated --gate-margin 0.15 --w 0.35 --out sub.csv
+python src/textmc/inspect_data.py --root <데이터폴더>                      # 컬럼·해상도·정답 분포·중복 점검
+python src/textmc/vqa_textmc.py --mode dryrun   --root <데이터폴더>          # torch 없이 형식 검증
+python src/textmc/vqa_textmc.py --mode smoke    --root ... --model-id Qwen/Qwen3.5-27B
+python src/textmc/vqa_textmc.py --mode zeroshot --root ... --model-id Qwen/Qwen3.5-27B --tta-perms 2
+python src/textmc/vqa_textmc.py --mode all      --root ... --model-id Qwen/Qwen3.5-27B --epochs 1 --lr 1e-4
+python src/textmc/blend_probs.py --primary A_probs.npz --secondary B_probs.npz --strategy gated --gate-margin 0.15 --w 0.35 --out sub.csv
 ```
+
+`src/textmc/`의 스크립트는 같은 폴더의 `vqa_textmc.py`를 import하므로 위처럼 파일 경로로 직접 실행합니다(Colab 런북은 `os.chdir`로 그 폴더에 들어가 실행).
 
 컬럼명이 다르면 `--id-col/--path-col/--question-col/--choice-cols a,b,c,d/--answer-col`로 매핑합니다. 데이터 공개 후 실제 형식에 맞춰 프롬프트와 컬럼 매핑을 조정할 예정입니다.
 
-## PC 환경 (5070 Ti)
+## PC 환경 (5070 Ti, src/textmc)
 
 ```
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128

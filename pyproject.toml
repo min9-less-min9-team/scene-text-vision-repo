@@ -1,0 +1,36 @@
+[project]
+name = "stv"
+version = "0.1.0"
+description = "Scene-text VQA (4-choice): notebooks/baseline.ipynb (Qwen3-VL + Unsloth QLoRA), run on RunPod"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "unsloth",
+    "trl",
+    "peft",
+    "safetensors",
+    "pillow",
+    "pandas",
+    "numpy",
+    "torch",
+    "torchvision",
+    "wandb",
+    "ipykernel",
+    "tqdm",
+]
+
+[dependency-groups]
+eda = ["scipy", "scikit-learn", "matplotlib"]
+
+# 패키지가 아니라 노트북 프로젝트: uv sync는 의존성만 설치
+[tool.uv]
+package = false
+
+# RTX 50xx (Blackwell) needs CUDA 12.8 wheels
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

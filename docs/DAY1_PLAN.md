@@ -108,7 +108,7 @@
 
 - 16기 2회차 Kaggle Data 탭의 PDF `(260826) 16 AI .pdf`: 1회차의 "데스크탑 환경설정.pdf"와 같은 파일로 보임. PC 세팅 기준이 필요하면 열어볼 것.
 - 16기 1회차 Data 탭의 베이스라인 노트북 `(260827)_baseline_colab.ipynb`, `(260827)_baseline_desktop5060ti.ipynb`: 주최 측 베이스라인 구조 참고용.
-- 09:00 공개 후 가장 먼저 볼 것: Overview·Data·Rules 텍스트, 베이스라인 노트북, `train.csv` 상위 20행, 이미지 5~10장. 이 형식에 맞춰 `scripts/vqa_textmc.py`의 컬럼 매핑·프롬프트를 조정한다.
+- 09:00 공개 후 가장 먼저 볼 것: Overview·Data·Rules 텍스트, 베이스라인 노트북, `train.csv` 상위 20행, 이미지 5~10장. 이 형식에 맞춰 `src/textmc/vqa_textmc.py`의 컬럼 매핑·프롬프트를 조정한다.
 - 팀 공유 사항: 팀 인원과 가용 시간, PC 4대의 `nvidia-smi` CUDA 버전과 OS, Colab 배정 GPU 종류와 남은 CU.
 
 ---

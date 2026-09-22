@@ -8,7 +8,7 @@ Public 2,500문항급에서 두 제출이 D문항 다르면 √D문항 이내의
 직전 대회 상위권 분석
 
 ### 출처
-1회차 2위 docs/LEARNINGS.md 1절, `scripts/blend_probs.py` 출력
+1회차 2위 docs/LEARNINGS.md 1절, `src/textmc/blend_probs.py` 출력
 
 ### 핵심 내용
 점수 차 표준편차 ≈ √D/2. D=20이면 ±4문항, D=100이면 ±10문항은 노이즈. 1회차 2위는 이걸 몰라 하루를 날렸다(vt −5, ivl35 −3, 투표 −5를 전부 실패로 읽음).

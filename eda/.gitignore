@@ -1,0 +1,10 @@
+.cache/
+resnet18_embeddings.npz
+__pycache__/
+
+# Root .gitignore excludes generated data/plot extensions globally. Keep the
+# compact EDA deliverables versionable while excluding the 12 MB raw embedding
+# cache above.
+!plots/*.png
+!tables/*.csv
+!embedding_pca_projection.npz

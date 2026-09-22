@@ -11,7 +11,7 @@ PC-A, PC-B, PC-C, PC-D (각자 자기 PC)
 `requirements-pc.txt`, `nvidia-smi`로 확인한 CUDA 버전(5070 Ti는 Blackwell이라 cu128 이상 PyTorch 필수). Windows는 `PYTHONUTF8=1`.
 
 ### 완료 기준
-각 PC에서 `python -c "import torch, transformers, peft, bitsandbytes"` 성공, `python scripts/vqa_textmc.py --help` 출력 확인, `Qwen/Qwen3.5-4B`와 `Qwen/Qwen3.5-9B` 다운로드 완료. PC별 torch/transformers/peft/bitsandbytes 버전을 이 이슈 댓글에 기록.
+각 PC에서 `python -c "import torch, transformers, peft, bitsandbytes"` 성공, `python src/textmc/vqa_textmc.py --help` 출력 확인, `Qwen/Qwen3.5-4B`와 `Qwen/Qwen3.5-9B` 다운로드 완료. PC별 torch/transformers/peft/bitsandbytes 버전을 이 이슈 댓글에 기록.
 
 ### 산출물 위치
 각 PC 로컬. 버전 표는 이 이슈 댓글.
