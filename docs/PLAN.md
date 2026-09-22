@@ -1,7 +1,7 @@
 # SSAFY 16기 2회차 AI 챌린지 (텍스트 이미지 4지선다 VQA) 사전 계획
 
 작성 2026-09-20, 갱신 2026-09-21 (Kaggle 디스커션·영문권 대회 조사 반영). 대회 페이지: https://www.kaggle.com/competitions/ssafy-16-2-ai-9-21-9-28 (9/21 09:00 과제·데이터 공개, 9/28 마감, 참가 등록 994명).
-실행 도구는 `scripts/`(`vqa_textmc.py`, `inspect_data.py`, `blend_probs.py`, `ocr_extract.py`)와 `notebooks/colab_runbook.ipynb`에 있습니다. 첫날 실행 순서는 `docs/DAY1_PLAN.md`, 논문 조사는 `docs/PAPERS.md`를 보세요.
+실행 도구는 `src/textmc/`(`vqa_textmc.py`, `inspect_data.py`, `blend_probs.py`, `ocr_extract.py`)와 `notebooks/colab_runbook.ipynb`에 있습니다. 첫날 실행 순서는 `docs/DAY1_PLAN.md`, 논문 조사는 `docs/PAPERS.md`를 보세요.
 
 ---
 

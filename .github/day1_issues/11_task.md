@@ -19,7 +19,7 @@ Drive/scene-text-vision-runs/newtech9b/
 ### 마감
 9/21 22:00
 
-시간이 남으면 OCR 힌트 A/B(`scripts/ocr_extract.py`). 단, 한국어 장면 VQA에서 효과 없음이 보고돼(66→65) 최하 우선.
+시간이 남으면 OCR 힌트 A/B(`src/textmc/ocr_extract.py`). 단, 한국어 장면 VQA에서 효과 없음이 보고돼(66→65) 최하 우선.
 
 ### 체크리스트
 - [ ] 같은 검증 분할(시드·id 목록)을 사용했다

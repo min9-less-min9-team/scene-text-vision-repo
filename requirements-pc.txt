@@ -1,0 +1,13 @@
+# RTX 5070 Ti (Blackwell) needs a CUDA 12.8+ PyTorch build. Install torch FIRST, then this file.
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+# Qwen3.5 needs transformers from git main (5.x).
+transformers @ git+https://github.com/huggingface/transformers.git
+peft>=0.20.0
+accelerate>=1.8.0
+bitsandbytes>=0.46.1
+pandas>=2.2
+numpy
+pillow
+scikit-learn>=1.5
+tqdm
+safetensors

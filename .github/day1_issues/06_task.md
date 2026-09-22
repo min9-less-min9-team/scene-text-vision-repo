@@ -8,7 +8,7 @@ labels: task,day1
 PC-A (5070 Ti)
 
 ### 입력·의존성
-검증 분할 이슈. `scripts/vqa_textmc.py --mode zeroshot --model-id Qwen/Qwen3.5-9B --precision 4bit --max-test-samples 400`.
+검증 분할 이슈. `src/textmc/vqa_textmc.py --mode zeroshot --model-id Qwen/Qwen3.5-9B --precision 4bit --max-test-samples 400`.
 
 ### 완료 기준
 검증 400장에서 `--max-visual-tokens` {원본 근처, 1.5배, 2배} × `--prompt-style` {text, generic} 6조합의 정확도 표(전체·유형별)를 댓글로. 층·상호·숫자 유형에서 해상도 이득이 있는지 명시. 27B 학습에 쓸 설정 1개를 결론으로.

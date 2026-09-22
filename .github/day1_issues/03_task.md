@@ -8,7 +8,7 @@ labels: task,day1
 GPU 불필요
 
 ### 입력·의존성
-train.csv 공개 후. `scripts/vqa_textmc.py`의 그룹 분할(이미지 해시 기준, `--valid-size`, `--seed`).
+train.csv 공개 후. `src/textmc/vqa_textmc.py`의 그룹 분할(이미지 해시 기준, `--valid-size`, `--seed`).
 
 ### 완료 기준
 Drive에 `valid_ids.txt`(시드 명시) 저장, 확률 파일 규격(`*_probs.npz`: avg [N,4], runs [T,N,4], ids, 행 = test.csv 순서) 공지, 실험 로그 시트(실험명, 모델, 해상도, 검증 정확도, Public, 챔피언과 다른 문항 수 D) 생성, 제출 담당자 1명 지정, 닫은 길 목록 Insight 이슈 개설.
