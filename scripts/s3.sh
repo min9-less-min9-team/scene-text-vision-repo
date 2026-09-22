@@ -3,8 +3,8 @@
 #
 #   bash scripts/s3.sh push-data data.zip     # 데이터 업로드 (최초 1회) → stv/data.zip
 #   bash scripts/s3.sh ls [경로]              # 기본: 내 결과 폴더 stv/outputs/{STV_USER}/
-#   bash scripts/s3.sh log 실험이름           # run.log 끝부분 보기
-#   bash scripts/s3.sh pull 실험이름 [사용자] # 결과를 outputs/{사용자}/{실험이름}/ 으로 내려받기
+#   bash scripts/s3.sh pull [사용자]          # 결과 폴더 전체를 outputs/{사용자}/ 로 내려받기 (어댑터·trainer 제외)
+#   bash scripts/s3.sh pull-sub [사용자]      # 제출 파일(submission*.csv)만
 #   bash scripts/s3.sh aws ...                # 그대로 aws s3 명령 (예: aws s3 rm s3://$RUNPOD_VOLUME_ID/stv/outputs/x --recursive)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -29,8 +29,8 @@ cmd=${1:-ls}; shift || true
 case $cmd in
     push-data) aws s3 cp "${1:?data.zip 경로}" "$BUCKET/stv/data.zip" ;;
     ls)        aws s3 ls "$BUCKET/${1:-stv/outputs/$STV_USER/}" ;;
-    log)       aws s3 cp "$BUCKET/stv/outputs/${2:-$STV_USER}/${1:?실험 이름}/run.log" - | tail -n "${LINES_N:-40}" ;;
-    pull)      aws s3 sync "$BUCKET/stv/outputs/${2:-$STV_USER}/${1:?실험 이름}/" "outputs/${2:-$STV_USER}/$1/" --exclude "trainer/*" ;;
+    pull)      aws s3 sync "$BUCKET/stv/outputs/${1:-$STV_USER}/" "outputs/${1:-$STV_USER}/" --exclude "trainer/*" --exclude "*_best/*" --exclude "wandb/*" ;;
+    pull-sub)  aws s3 sync "$BUCKET/stv/outputs/${1:-$STV_USER}/" "outputs/${1:-$STV_USER}/" --exclude "*" --include "submission*.csv" ;;
     aws)       aws "$@" ;;
     *)         sed -n 2,9p "$0"; exit 1 ;;
 esac

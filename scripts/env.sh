@@ -10,6 +10,10 @@ elif [ -n "${RUNPOD_POD_ID:-}" ] || [ -d /workspace ]; then
     # /workspace = network volume (pod 재시작 후에도 유지). 컨테이너 디스크는 작아서 캐시를 옮김
     export HF_HOME=${HF_HOME:-/workspace/.cache/huggingface}
     export UV_CACHE_DIR=${UV_CACHE_DIR:-/workspace/.cache/uv}
+    # repo는 volume에 두더라도 venv는 컨테이너 디스크에 (network volume에서 import는 매우 느림)
+    export UV_PROJECT_ENVIRONMENT=${UV_PROJECT_ENVIRONMENT:-/root/.venv-stv}
+    # uv run이 매번 기본 그룹으로 재동기화하며 eda 그룹을 지우지 않도록. 설치는 bootstrap의 uv sync가 담당
+    export UV_NO_SYNC=1
 else
     export STV_ENV=local
 fi
