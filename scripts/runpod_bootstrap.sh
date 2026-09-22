@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # RunPod pod가 켜질 때 백그라운드로 한 번 실행됩니다 (scripts/runpod.py up이 pod 시작 명령에 넣음).
 # Jupyter는 이 스크립트와 별개로 이미지 기본 /start.sh가 띄우므로, 이 스크립트는 개발 환경만 준비합니다.
-#   1. git 인증 설정 (GITHUB_TOKEN 환경변수 → clone/push 모두 사용)
+#   1. git 인증 설정 (GITHUB_TOKEN 환경변수 → clone/push 모두 사용) + 작업 트리가 깨끗하면 git pull --ff-only
 #   2. venv (uv sync). venv는 컨테이너 디스크(/root/.venv-stv)에 두어 import가 느린 network volume을 피함
 #   3. Jupyter 커널 등록 (stv) — notebooks/baseline.ipynb 가 이 커널을 사용
 #   4. .bashrc: 터미널을 열면 repo로 이동 + scripts/env.sh
@@ -23,6 +23,14 @@ fi
 git config --global --add safe.directory "$REPO"
 [ -n "$(git config --global user.name)" ] || git config --global user.name "${STV_USER:-runpod}"
 [ -n "$(git config --global user.email)" ] || git config --global user.email "${STV_USER:-runpod}@runpod"
+
+# repo 최신화: 작업 트리가 깨끗할 때만 fast-forward (수정 중인 파일이 있으면 건너뜀 → 직접 git pull)
+if [ -z "$(git status --porcelain)" ]; then
+    git pull --ff-only && echo "[bootstrap] git pull ok → $(git rev-parse --short HEAD) ($(git branch --show-current))" \
+        || echo "[bootstrap] WARNING: git pull 실패 (fast-forward 불가?) → 터미널에서 직접 확인"
+else
+    echo "[bootstrap] 수정 중인 파일이 있어 git pull 건너뜀:"; git status --short | head
+fi
 
 # 2. venv
 command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh

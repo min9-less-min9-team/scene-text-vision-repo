@@ -192,7 +192,7 @@ pod를 만들지 못하면 과금 없이 바로 끝나고, 실패 사실이 화�
 
 | 경로 | 내용 | pod 삭제 후 |
 |---|---|---|
-| `/workspace/stv/home/{STV_USER}/scene-text-vision-repo` | repo 작업본. 없을 때만 `STV_BRANCH`를 clone, 있으면 그대로 둠 | 유지 |
+| `/workspace/stv/home/{STV_USER}/scene-text-vision-repo` | repo 작업본. 없으면 `STV_BRANCH`를 clone. 있으면 수정 중인 파일이 없을 때만 `git pull --ff-only`(수정 중이면 건너뛰고 `bootstrap.log`에 표시 → 직접 pull) | 유지 |
 | `/workspace/stv/home/{STV_USER}/bootstrap.log` | 환경 준비 로그 | 유지 |
 | `/workspace/.cache/uv` | 패키지 캐시 → 두 번째부터 `uv sync`가 빠름 | 유지 |
 | `/root/.venv-stv` | venv (`uv sync --frozen --group eda`). network volume에서 import가 느려 컨테이너 디스크에 둠 | 삭제 → 다음 `up`에서 재생성 |
