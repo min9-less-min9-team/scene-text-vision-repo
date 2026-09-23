@@ -82,7 +82,13 @@ train/test JS 거리 0.025(거의 동일). `run_eda.py`의 다른 분류 체계�
 - 동률 465문항은 채점에서 빼거나, 정답을 "해당 보기를 고른 annotator 비율"로 주는 soft 점수를 쓰는 편이 안정적이다(아직 미구현).
 - test와 같은 분포의 검증이 필요하면 train에서 떼어낸 valid(`--split valid`)를 쓴다.
 
-## 4. 한계
+## 4. train / validation 분할 (2026-09-23 추가)
+
+`eda/split_validation.py`가 `data/raw/train.csv`를 `data/split/train.csv`(6,043) / `data/split/validation.csv`(671, 10%)로 나눈다. 같은 이미지(SHA-256 또는 pHash 동일, train 내부 9그룹)는 한쪽에만 들어가고 정답 글자 비율은 층화했다(seed 42, 검증 id 목록 `eda/tables/validation_ids.csv`).
+
+`eda/split_eda.ipynb`에서 train / validation / test를 비교한 결과, 종횡비·픽셀·밝기·대비·HSV·질문/선지 길이 모두 validation↔train, validation↔test에서 |SMD| ≤ 0.08, KS ≤ 0.05이고 질문 유형 TV 거리는 0.023 / 0.025다. 검증 정확도를 test 점수의 추정치로 써도 된다(671문항 기준 표준오차 약 ±1.5%p).
+
+## 5. 한계
 
 - 질문 유형은 정규식 휴리스틱이며 두 분석의 분류 체계가 다르다. 유형별 비율은 참고치다.
 - 길이는 글자/어절 기준이다. 모델 tokenizer 기준 토큰 수는 재지 않았다.

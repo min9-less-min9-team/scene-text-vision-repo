@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA_ROOT = ROOT / "data"
+DATA_ROOT = ROOT / "data" / "raw"
 SPLITS = ("train", "test", "dev")
 MAIN_SPLITS = ("train", "test")
 CHOICES = ("a", "b", "c", "d")
