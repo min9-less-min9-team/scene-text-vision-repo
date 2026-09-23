@@ -1,6 +1,6 @@
 # RunPod 개발 환경 가이드 (notebooks/baseline.ipynb)
 
-실험 코드는 **`notebooks/baseline.ipynb`** 하나입니다(Qwen3-VL + Unsloth QLoRA, 720×960 고정, 정답 글자만 loss + label smoothing). `.env`에 본인 키를 넣고 `up`을 실행하면 RunPod에서 GPU pod가 뜨고 **웹 Jupyter**로 접속해 노트북을 실행합니다. 끝나면 `down`으로 pod를 지워 과금을 멈춥니다. repo 작업본·결과·모델 캐시는 Network Volume(`/workspace`)에 남아 다음 `up` 때 그대로 이어집니다.
+실험 코드는 **`notebooks/baseline.ipynb`** 하나입니다(Qwen3-VL + Unsloth QLoRA, 동적 해상도(종횡비 유지), `data/split` 고정 검증, 정답 글자만 loss + label smoothing). `.env`에 본인 키를 넣고 `up`을 실행하면 RunPod에서 GPU pod가 뜨고 **웹 Jupyter**로 접속해 노트북을 실행합니다. 끝나면 `down`으로 pod를 지워 과금을 멈춥니다. repo 작업본·결과·모델 캐시는 Network Volume(`/workspace`)에 남아 다음 `up` 때 그대로 이어집니다.
 
 ```
 내 PC                              RunPod pod (GPU)                                   저장소
@@ -154,7 +154,7 @@ tail -f ../bootstrap.log       # 마지막 줄이 "[bootstrap] done"이면 준�
 | 노트북이 쓰는 경로 | 내용 | pod 삭제 후 |
 |---|---|---|
 | `/workspace/stv/data.zip` | 3번에서 올린 데이터 | 유지 |
-| `/root/data/raw`, `/root/data/resize` | 압축 해제·720×960 리사이즈 (첫 셀, 1~3분) | 삭제 → 다음 `up`에서 첫 셀이 다시 만듦 |
+| `/root/data/raw`, `/root/data/split` | 압축 해제·train/validation 분할 CSV (첫 셀, 1~3분) | 삭제 → 다음 `up`에서 첫 셀이 다시 만듦 |
 | `/workspace/.cache/huggingface` | 모델 캐시. 처음 한 번만 내려받음 | 유지 |
 | `/workspace/stv/outputs/{STV_USER}/` | `OUTPUT_DIR`: 어댑터(`*_best/`), 확률(`probs_*.npy`), 제출(`submission*.csv`), 로그(`*_log.txt`), `experiments.csv` | 유지 |
 

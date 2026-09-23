@@ -639,7 +639,7 @@ TORCH_HOME=eda/.cache/torch uv run python eda/run_eda.py --resume
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-root", type=Path, default=ROOT / "data")
+    parser.add_argument("--data-root", type=Path, default=ROOT / "data" / "raw")
     parser.add_argument("--output", type=Path, default=ROOT / "eda")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--workers", type=int, default=0, help="DataLoader workers (0 is the most portable)")
