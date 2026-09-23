@@ -31,7 +31,7 @@ SSAFY 16기 2회차 AI 챌린지(텍스트 이미지 기반 질의응답, 9/21 0
 
 ## 팀 공유 규약 (첫날 확정)
 
-- **검증 분할**: 이미지 단위 그룹 분할, 시드와 id 목록을 Drive에 고정. 모든 모델은 같은 분할로 검증합니다.
+- **검증 분할**: `uv run python eda/split_validation.py` → `data/split/{train,validation}.csv` (train의 10%, 이미지 해시 그룹 단위 + 정답 층화, seed 42). 검증 id 목록은 `eda/tables/validation_ids.csv`에 버전 관리. 모든 모델은 같은 분할로 검증합니다. 원본은 `data/raw/`에 그대로 둡니다.
 - **확률 파일**: `*_probs.npz` (`avg` [N,4], `runs` [T,N,4], `ids`). 행 순서는 `test.csv` 순서. `src/textmc/vqa_textmc.py`가 이 형식으로 저장합니다. `notebooks/baseline.ipynb`는 `probs_test_*.npy`([N,4], test.csv 순서)로 저장하므로 결합 시 `avg`로 감싸 맞춥니다.
 - **제출 예산**: 하루 20회(1회차 규정 기준, 공개 후 재확인). 제출 담당자 1명. 챔피언과 다른 문항 수 D가 √D 문턱을 넘는 후보만 제출합니다(`src/textmc/blend_probs.py`가 출력).
 - **산출물 위치**: Colab `/content`는 세션 회수 시 사라지므로 adapter·npz·csv는 반드시 Drive에 둡니다. RunPod는 `/workspace/stv/outputs/{이름}/`(Network Volume)에 둡니다.
@@ -44,7 +44,7 @@ notebooks/   baseline.ipynb (RunPod/로컬 GPU: Qwen3-VL-4B + Unsloth QLoRA, wan
              colab_runbook.ipynb (Colab: src/textmc 파이프라인 실행 순서)
 src/textmc/  vqa_textmc.py(학습·추론·TTA·불확실도), inspect_data.py(데이터 점검), blend_probs.py(확률 결합), ocr_extract.py(선택)
 scripts/     runpod.py(pod 켜기/끄기), runpod_bootstrap.sh(pod 안 환경 준비), s3.sh(volume 업로드·다운로드), env.sh
-eda/         EDA 노트북·결과 (docs/EDA.md 요약)
+eda/         EDA 노트북·결과 (docs/EDA.md 요약), split_validation.py(train/validation 분할), split_eda.ipynb(train/validation/test 비교)
 .github/     이슈 템플릿(task, insight), 첫날 이슈 원문
 ```
 
@@ -54,7 +54,7 @@ eda/         EDA 노트북·결과 (docs/EDA.md 요약)
 |---|---|---|
 | 환경 | RunPod pod(웹 Jupyter) 또는 로컬 GPU. `uv sync` | Colab A100 / 5070 Ti PC. `pip` |
 | 모델 | `unsloth/Qwen3-VL-4B-Instruct-unsloth-bnb-4bit` (Unsloth QLoRA) | `Qwen/Qwen3.5-27B` 등 (transformers + peft) |
-| 특징 | 720×960 고정, 정답 글자만 loss + label smoothing, wandb 기록, 설정 해시로 실험 자동 구분 | CLI 모드(dryrun/smoke/zeroshot/train/infer), 불확실 문항 재추론, gated 결합, OCR 힌트 |
+| 특징 | 동적 해상도(종횡비 유지, 픽셀 예산), `data/split` 고정 검증 분할, 정답 글자만 loss + label smoothing, wandb 기록, 설정 해시로 실험 자동 구분 | CLI 모드(dryrun/smoke/zeroshot/train/infer), 불확실 문항 재추론, gated 결합, OCR 힌트 |
 | 시작 | `docs/RUNPOD.md` | 아래 "스크립트 요약" |
 
 ## RunPod (baseline.ipynb)
