@@ -18,6 +18,7 @@ import json
 import os
 import secrets
 import shlex
+import ssl
 import subprocess
 import sys
 import time
@@ -25,6 +26,12 @@ import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
+
+try:
+    import certifi
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    SSL_CONTEXT = None
 
 ROOT = Path(__file__).resolve().parents[1]
 API = "https://rest.runpod.io/v1"
@@ -72,7 +79,7 @@ def api(method: str, path: str, body=None, url: str = "", fatal: bool = True):
                  "User-Agent": "stv-runpod/2.0"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=60, context=SSL_CONTEXT) as resp:
             raw = resp.read()
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as err:
@@ -213,7 +220,7 @@ def up(args):
 def jupyter_ready(url: str) -> bool:
     """RunPod HTTP 프록시가 Jupyter에 연결되면 200(로그인 리다이렉트 포함). pod가 뜨는 중이면 프록시가 404/502를 돌려줌."""
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "stv-runpod/2.0"}), timeout=10) as resp:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "stv-runpod/2.0"}), timeout=10, context=SSL_CONTEXT) as resp:
             return resp.status < 400
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
         return False
