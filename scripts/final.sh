@@ -66,3 +66,19 @@ nohup sh -c '
   sleep 60
   runpodctl stop pod $RUNPOD_POD_ID
 ' > logs/autostop.log 2>&1 &
+
+# [checkpoint 별도 저장]
+cp keep_ckpts.sh /workspace/stv/keep_ckpts.sh     # 볼륨에 한 번 올려 두기
+
+# Qwen pod
+nohup bash /workspace/stv/keep_ckpts.sh /workspace/stv/outputs/final_qwen3vl32b_4bit 800 1200 1600 \
+  > /workspace/stv/keep_qwen.log 2>&1 &
+
+# Gemma pod
+nohup bash /workspace/stv/keep_ckpts.sh /workspace/stv/outputs/final_gemma4_31b_4bit 800 1200 1600 \
+  > /workspace/stv/keep_gemma.log 2>&1 &
+
+# HCX pod
+nohup bash /workspace/stv/keep_ckpts.sh /workspace/stv/outputs/final_hcx_think32b_4bit_aug-orig 200 400 \
+  > /workspace/stv/keep_hcx.log 2>&1 &
+

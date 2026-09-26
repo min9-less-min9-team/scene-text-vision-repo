@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # RunPod Network Volume을 S3 API로 다룹니다 (pod 없이 로컬에서 업로드·다운로드). 설정은 .env.
 #
+#   bash scripts/s3.sh pull-ckpt <결과폴더> [하위경로]   # LoRA/checkpoint를 받아 zip으로 (기본 하위경로: adapter)
 #   bash scripts/s3.sh push-data data.zip     # 데이터 업로드 (최초 1회) → stv/data.zip
 #   bash scripts/s3.sh ls [경로]              # 기본: 내 결과 폴더 stv/outputs/{STV_USER}/
 #   bash scripts/s3.sh pull [사용자]          # 결과 폴더 전체를 outputs/{사용자}/ 로 내려받기 (어댑터·trainer 제외)
