@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # RunPod Network Volume을 S3 API로 다룹니다 (pod 없이 로컬에서 업로드·다운로드). 설정은 .env.
 #
+#   bash scripts/s3.sh get <볼륨경로> [로컬경로]        # 파일 하나 또는 폴더(끝에 /) 받기 (예: stv/tta/gemma_ckpt800_tta2/submission_hard.csv)
 #   bash scripts/s3.sh pull-ckpt <결과폴더> [하위경로]   # LoRA/checkpoint를 받아 zip으로 (기본 하위경로: adapter)
 #   bash scripts/s3.sh push-data data.zip     # 데이터 업로드 (최초 1회) → stv/data.zip
 #   bash scripts/s3.sh ls [경로]              # 기본: 내 결과 폴더 stv/outputs/{STV_USER}/
@@ -32,6 +33,24 @@ case $cmd in
     ls)        aws s3 ls "$BUCKET/${1:-stv/outputs/$STV_USER/}" ;;
     pull)      aws s3 sync "$BUCKET/stv/outputs/${1:-$STV_USER}/" "outputs/${1:-$STV_USER}/" --exclude "trainer/*" --exclude "*_best/*" --exclude "wandb/*" ;;
     pull-sub)  aws s3 sync "$BUCKET/stv/outputs/${1:-$STV_USER}/" "outputs/${1:-$STV_USER}/" --exclude "*" --include "submission*.csv" ;;
+    get)
+        src=${1:?볼륨 경로 (예: stv/tta/gemma_ckpt800_tta2/submission_hard.csv)}; src=${src#/}
+        if [[ $src == */ ]]; then
+            dst=${2:-downloads/$src}
+            aws s3 sync "$BUCKET/$src" "$dst/"
+        else
+            dst=${2:-downloads/$(basename "$src")}
+            mkdir -p "$(dirname "$dst")"
+            aws s3 cp "$BUCKET/$src" "$dst"
+        fi
+        echo "saved → $dst" ;;
+    pull-ckpt)
+        run=${1:?결과 폴더 이름 (예: final_qwen3vl32b_4bit)}; sub=${2:-adapter}
+        dst="checkpoints/$run/$sub"
+        aws s3 sync "$BUCKET/stv/outputs/$run/$sub/" "$dst/"
+        zip="checkpoints/${run}__${sub//\//_}.zip"
+        (cd "checkpoints/$run" && ${PYTHON:-python3} -m zipfile -c "../$(basename "$zip")" "$sub")
+        echo "saved → $zip" ;;
     aws)       aws "$@" ;;
-    *)         sed -n 2,9p "$0"; exit 1 ;;
+    *)         sed -n 2,11p "$0"; exit 1 ;;
 esac
